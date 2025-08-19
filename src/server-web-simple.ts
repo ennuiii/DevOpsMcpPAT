@@ -81,6 +81,531 @@ app.get("/health", (req, res) => {
   });
 });
 
+// SSE endpoint for MCP connection establishment
+app.get("/sse", (req, res) => {
+  console.log("📡 SSE connection requested");
+  
+  // Set comprehensive SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Credentials': 'true',
+  });
+
+  // Generate session ID
+  const sessionId = Math.random().toString(36).substring(2) + '-' + Date.now().toString(36);
+  console.log(`🎬 SSE connection established with session: ${sessionId}`);
+
+  // Send initial connection info
+  res.write(`event: endpoint\n`);
+  res.write(`data: /message?sessionId=${sessionId}\n\n`);
+
+  // Send hello message
+  const helloMessage = {
+    jsonrpc: '2.0',
+    method: 'hello',
+    params: {
+      sessionId: sessionId,
+      serverName: 'azure-devops-mcp-pat',
+      serverVersion: packageVersion
+    },
+    id: `hello-${Date.now()}`
+  };
+  res.write(`event: message\n`);
+  res.write(`data: ${JSON.stringify(helloMessage)}\n\n`);
+
+  // Heartbeat to keep connection alive
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: heartbeat ${Date.now()}\n\n`);
+    } catch (error) {
+      console.log('💔 Heartbeat failed, client disconnected');
+      clearInterval(heartbeat);
+    }
+  }, 30000);
+
+  // Handle client disconnect
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    console.log(`🔌 SSE client disconnected: ${sessionId}`);
+  });
+});
+
+// POST /message endpoint for MCP JSON-RPC requests (AzureMcpProxy style)
+app.post("/message", async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+  console.log(`📨 MCP JSON-RPC Request received on POST /message with session: ${sessionId}`);
+  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+  
+  try {
+    const mcpRequest = req.body;
+    
+    if (!mcpRequest || !mcpRequest.jsonrpc) {
+      console.log("❌ Invalid MCP request format");
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        id: mcpRequest?.id || null,
+        error: {
+          code: -32600,
+          message: "Invalid Request"
+        }
+      });
+    }
+    
+    // Handle error responses from client
+    if (mcpRequest.error) {
+      console.log("⚠️ Client sent error response:", mcpRequest.error);
+      return res.json({
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: { acknowledged: true }
+      });
+    }
+    
+    if (!mcpRequest.method) {
+      console.log("❌ Missing method in MCP request");
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        id: mcpRequest?.id || null,
+        error: {
+          code: -32600,
+          message: "Missing method"
+        }
+      });
+    }
+
+    console.log(`🔧 Processing MCP method: ${mcpRequest.method}`);
+    
+    let response;
+    
+    if (mcpRequest.method === "initialize") {
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          protocolVersion: "2024-11-05",
+          capabilities: {
+            tools: {},
+            transport: {
+              name: "streamable-https",
+              supported: true
+            }
+          },
+          serverInfo: {
+            name: "azure-devops-mcp-pat",
+            version: packageVersion,
+            transport: "streamable-https"
+          }
+        }
+      };
+    } else if (mcpRequest.method === "tools/list") {
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          tools: [
+            {
+              name: "get_work_item",
+              description: "Get a work item by ID",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  workItemId: { type: "number", description: "Work item ID" }
+                },
+                required: ["workItemId"]
+              }
+            },
+            {
+              name: "list_projects",
+              description: "List all projects in Azure DevOps",
+              inputSchema: {
+                type: "object",
+                properties: {}
+              }
+            },
+            {
+              name: "get_project",
+              description: "Get details of a specific project",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  projectId: { type: "string", description: "Project ID or name" }
+                },
+                required: ["projectId"]
+              }
+            }
+          ]
+        }
+      };
+    } else if (mcpRequest.method === "tools/call") {
+      const { name, arguments: args } = mcpRequest.params;
+      
+      try {
+        let result: string;
+        
+        if (name === "get_work_item") {
+          const { workItemId } = args;
+          if (!workItemId) {
+            throw new Error("workItemId is required");
+          }
+          
+          const client = await getAzureDevOpsClient();
+          const witApi = await client.getWorkItemTrackingApi();
+          const workItem = await witApi.getWorkItem(workItemId);
+          
+          result = `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
+                   `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
+                   `**State**: ${workItem.fields!["System.State"]}\n` +
+                   `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
+                   `**Created**: ${workItem.fields!["System.CreatedDate"]}`;
+        } else if (name === "list_projects") {
+          const client = await getAzureDevOpsClient();
+          const coreApi = await client.getCoreApi();
+          const projects = await coreApi.getProjects();
+          
+          const projectList = projects.map((project: any) => {
+            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
+          }).join('\n');
+          
+          result = `# Projects (${projects.length})\n\n${projectList}`;
+        } else if (name === "get_project") {
+          const { projectId } = args;
+          if (!projectId) {
+            throw new Error("projectId is required");
+          }
+          
+          const client = await getAzureDevOpsClient();
+          const coreApi = await client.getCoreApi();
+          const project = await coreApi.getProject(projectId);
+          
+          if (!project) {
+            result = `Project ${projectId} not found.`;
+          } else {
+            result = `# Project: ${project.name}\n\n` +
+                     `**ID**: ${project.id}\n` +
+                     `**Description**: ${project.description || "No description"}\n` +
+                     `**State**: ${project.state}\n` +
+                     `**Visibility**: ${project.visibility}\n` +
+                     `**URL**: ${project.url}`;
+          }
+        } else {
+          throw new Error(`Tool ${name} not supported`);
+        }
+        
+        response = {
+          jsonrpc: "2.0",
+          id: mcpRequest.id,
+          result: {
+            content: [{
+              type: "text",
+              text: result
+            }]
+          }
+        };
+      } catch (error: any) {
+        console.error("❌ Error executing tool:", error);
+        response = {
+          jsonrpc: "2.0",
+          id: mcpRequest.id,
+          error: {
+            code: -32603,
+            message: "Internal error executing tool",
+            data: error instanceof Error ? error.message : String(error)
+          }
+        };
+      }
+    } else if (mcpRequest.method === "notifications/initialized") {
+      console.log("🎬 Client initialized notification received");
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {}
+      };
+    } else if (mcpRequest.method === "ping") {
+      console.log("🏓 Ping request received");
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          timestamp: new Date().toISOString()
+        }
+      };
+    } else if (mcpRequest.method === "hello") {
+      console.log("👋 Hello request received");
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          serverName: "azure-devops-mcp-pat",
+          serverVersion: packageVersion,
+          transport: "streamable-https"
+        }
+      };
+    } else {
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        error: {
+          code: -32601,
+          message: "Method not found"
+        }
+      };
+    }
+
+    console.log("📤 MCP Response:", JSON.stringify(response, null, 2));
+    res.json(response);
+    
+  } catch (error: any) {
+    console.error("❌ Error processing MCP request:", error);
+    res.status(500).json({
+      jsonrpc: "2.0",
+      id: req.body?.id || null,
+      error: {
+        code: -32603,
+        message: "Internal error"
+      }
+    });
+  }
+});
+
+// POST /sse endpoint for MCP JSON-RPC requests (Cursor/MCP client style)
+app.post("/sse", async (req, res) => {
+  console.log("📨 MCP JSON-RPC Request received on POST /sse");
+  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+  
+  try {
+    const mcpRequest = req.body;
+    
+    if (!mcpRequest || !mcpRequest.jsonrpc) {
+      console.log("❌ Invalid MCP request format");
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        id: mcpRequest?.id || null,
+        error: {
+          code: -32600,
+          message: "Invalid Request"
+        }
+      });
+    }
+    
+    // Handle error responses from client
+    if (mcpRequest.error) {
+      console.log("⚠️ Client sent error response:", mcpRequest.error);
+      return res.json({
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: { acknowledged: true }
+      });
+    }
+    
+    if (!mcpRequest.method) {
+      console.log("❌ Missing method in MCP request");
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        id: mcpRequest?.id || null,
+        error: {
+          code: -32600,
+          message: "Missing method"
+        }
+      });
+    }
+
+    console.log(`🔧 Processing MCP method: ${mcpRequest.method}`);
+    
+    let response;
+    
+    if (mcpRequest.method === "initialize") {
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          protocolVersion: "2024-11-05",
+          capabilities: {
+            tools: {},
+            transport: {
+              name: "streamable-https",
+              supported: true
+            }
+          },
+          serverInfo: {
+            name: "azure-devops-mcp-pat",
+            version: packageVersion,
+            transport: "streamable-https"
+          }
+        }
+      };
+    } else if (mcpRequest.method === "tools/list") {
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          tools: [
+            {
+              name: "get_work_item",
+              description: "Get a work item by ID",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  workItemId: { type: "number", description: "Work item ID" }
+                },
+                required: ["workItemId"]
+              }
+            },
+            {
+              name: "list_projects",
+              description: "List all projects in Azure DevOps",
+              inputSchema: {
+                type: "object",
+                properties: {}
+              }
+            },
+            {
+              name: "get_project",
+              description: "Get details of a specific project",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  projectId: { type: "string", description: "Project ID or name" }
+                },
+                required: ["projectId"]
+              }
+            }
+          ]
+        }
+      };
+    } else if (mcpRequest.method === "tools/call") {
+      const { name, arguments: args } = mcpRequest.params;
+      
+      try {
+        let result: string;
+        
+        if (name === "get_work_item") {
+          const { workItemId } = args;
+          if (!workItemId) {
+            throw new Error("workItemId is required");
+          }
+          
+          const client = await getAzureDevOpsClient();
+          const witApi = await client.getWorkItemTrackingApi();
+          const workItem = await witApi.getWorkItem(workItemId);
+          
+          result = `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
+                   `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
+                   `**State**: ${workItem.fields!["System.State"]}\n` +
+                   `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
+                   `**Created**: ${workItem.fields!["System.CreatedDate"]}`;
+        } else if (name === "list_projects") {
+          const client = await getAzureDevOpsClient();
+          const coreApi = await client.getCoreApi();
+          const projects = await coreApi.getProjects();
+          
+          const projectList = projects.map((project: any) => {
+            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
+          }).join('\n');
+          
+          result = `# Projects (${projects.length})\n\n${projectList}`;
+        } else if (name === "get_project") {
+          const { projectId } = args;
+          if (!projectId) {
+            throw new Error("projectId is required");
+          }
+          
+          const client = await getAzureDevOpsClient();
+          const coreApi = await client.getCoreApi();
+          const project = await coreApi.getProject(projectId);
+          
+          if (!project) {
+            result = `Project ${projectId} not found.`;
+          } else {
+            result = `# Project: ${project.name}\n\n` +
+                     `**ID**: ${project.id}\n` +
+                     `**Description**: ${project.description || "No description"}\n` +
+                     `**State**: ${project.state}\n` +
+                     `**Visibility**: ${project.visibility}\n` +
+                     `**URL**: ${project.url}`;
+          }
+        } else {
+          throw new Error(`Tool ${name} not supported`);
+        }
+        
+        response = {
+          jsonrpc: "2.0",
+          id: mcpRequest.id,
+          result: {
+            content: [{
+              type: "text",
+              text: result
+            }]
+          }
+        };
+      } catch (error: any) {
+        console.error("❌ Error executing tool:", error);
+        response = {
+          jsonrpc: "2.0",
+          id: mcpRequest.id,
+          error: {
+            code: -32603,
+            message: "Internal error executing tool",
+            data: error instanceof Error ? error.message : String(error)
+          }
+        };
+      }
+    } else if (mcpRequest.method === "notifications/initialized") {
+      console.log("🎬 Client initialized notification received");
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {}
+      };
+    } else if (mcpRequest.method === "ping") {
+      console.log("🏓 Ping request received");
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          timestamp: new Date().toISOString()
+        }
+      };
+    } else if (mcpRequest.method === "hello") {
+      console.log("👋 Hello request received");
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        result: {
+          serverName: "azure-devops-mcp-pat",
+          serverVersion: packageVersion,
+          transport: "streamable-https"
+        }
+      };
+    } else {
+      response = {
+        jsonrpc: "2.0",
+        id: mcpRequest.id,
+        error: {
+          code: -32601,
+          message: "Method not found"
+        }
+      };
+    }
+
+    console.log("📤 MCP Response:", JSON.stringify(response, null, 2));
+    res.json(response);
+    
+  } catch (error: any) {
+    console.error("❌ Error processing MCP request:", error);
+    res.status(500).json({
+      jsonrpc: "2.0",
+      id: req.body?.id || null,
+      error: {
+        code: -32603,
+        message: "Internal error"
+      }
+    });
+  }
+});
+
 // Get work item endpoint
 app.post("/api/tools/wit_get_work_item", async (req, res) => {
   try {
@@ -232,11 +757,16 @@ app.post("/mcp", async (req, res) => {
           capabilities: {
             tools: {
               listChanged: true
+            },
+            transport: {
+              name: "streamable-https",
+              supported: true
             }
           },
           serverInfo: {
             name: "Azure DevOps MCP Server (PAT)",
-            version: packageVersion
+            version: packageVersion,
+            transport: "streamable-https"
           }
         }
       };
@@ -251,34 +781,33 @@ app.post("/mcp", async (req, res) => {
         result: {
           tools: [
             {
-              name: "wit_get_work_item",
-              description: "Get a single work item by ID",
+              name: "get_work_item",
+              description: "Get a work item by ID",
               inputSchema: {
                 type: "object",
                 properties: {
-                  id: { type: "number", description: "Work item ID" },
-                  project: { type: "string", description: "Project name (optional)" }
+                  workItemId: { type: "number", description: "Work item ID" }
                 },
-                required: ["id"]
+                required: ["workItemId"]
               }
             },
             {
-              name: "core_list_projects",
-              description: "List all projects in the organization",
+              name: "list_projects",
+              description: "List all projects in Azure DevOps",
               inputSchema: {
                 type: "object",
                 properties: {}
               }
             },
             {
-              name: "build_get_builds",
-              description: "Get builds for a project",
+              name: "get_project",
+              description: "Get details of a specific project",
               inputSchema: {
                 type: "object",
                 properties: {
-                  project: { type: "string", description: "Project name" }
+                  projectId: { type: "string", description: "Project ID or name" }
                 },
-                required: ["project"]
+                required: ["projectId"]
               }
             }
           ]
@@ -294,55 +823,71 @@ app.post("/mcp", async (req, res) => {
       try {
         let result;
         
-        if (name === "wit_get_work_item") {
-          const { id, project } = args;
-          if (!id) {
-            throw new Error("Work item ID is required");
+        if (name === "get_work_item") {
+          const { workItemId } = args;
+          if (!workItemId) {
+            throw new Error("workItemId is required");
           }
           
           const client = await getAzureDevOpsClient();
           const witApi = await client.getWorkItemTrackingApi();
-          const workItem = await witApi.getWorkItem(id);
+          const workItem = await witApi.getWorkItem(workItemId);
           
           result = {
             content: [{
               type: "text",
-              text: `Work Item #${workItem.id}: ${workItem.fields!["System.Title"]}\n` +
-                    `Type: ${workItem.fields!["System.WorkItemType"]}\n` +
-                    `State: ${workItem.fields!["System.State"]}\n` +
-                    `Assigned To: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
-                    `Created: ${workItem.fields!["System.CreatedDate"]}`
+              text: `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
+                    `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
+                    `**State**: ${workItem.fields!["System.State"]}\n` +
+                    `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
+                    `**Created**: ${workItem.fields!["System.CreatedDate"]}`
             }]
           };
-        } else if (name === "core_list_projects") {
+        } else if (name === "list_projects") {
           const client = await getAzureDevOpsClient();
           const coreApi = await client.getCoreApi();
           const projects = await coreApi.getProjects();
           
+          const projectList = projects.map((project: any) => {
+            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
+          }).join('\n');
+          
           result = {
             content: [{
               type: "text",
-              text: `Found ${projects.length} project(s):\n` +
-                    projects.map(p => `- ${p.name} (${p.state})`).join('\n')
+              text: `# Projects (${projects.length})\n\n${projectList}`
             }]
           };
-        } else if (name === "build_get_builds") {
-          const { project } = args;
-          if (!project) {
-            throw new Error("Project name is required");
+        } else if (name === "get_project") {
+          const { projectId } = args;
+          if (!projectId) {
+            throw new Error("projectId is required");
           }
           
           const client = await getAzureDevOpsClient();
-          const buildApi = await client.getBuildApi();
-          const builds = await buildApi.getBuilds(project, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 10);
+          const coreApi = await client.getCoreApi();
+          const project = await coreApi.getProject(projectId);
           
-          result = {
-            content: [{
-              type: "text",
-              text: `Recent builds for ${project}:\n` +
-                    builds.map(b => `- Build ${b.buildNumber}: ${b.status} (${b.result || 'In Progress'})`).join('\n')
-            }]
-          };
+          if (!project) {
+            result = {
+              content: [{
+                type: "text",
+                text: `Project ${projectId} not found.`
+              }]
+            };
+          } else {
+            result = {
+              content: [{
+                type: "text",
+                text: `# Project: ${project.name}\n\n` +
+                      `**ID**: ${project.id}\n` +
+                      `**Description**: ${project.description || "No description"}\n` +
+                      `**State**: ${project.state}\n` +
+                      `**Visibility**: ${project.visibility}\n` +
+                      `**URL**: ${project.url}`
+              }]
+            };
+          }
         } else {
           throw new Error(`Unknown tool: ${name}`);
         }
