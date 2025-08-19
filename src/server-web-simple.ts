@@ -55,7 +55,7 @@ let azureDevOpsClient: azdev.WebApi;
 
 async function getAzureDevOpsClient(): Promise<azdev.WebApi> {
   if (!azureDevOpsClient) {
-    const authHandler = new PatAuthHandler(AZURE_DEVOPS_PAT);
+    const authHandler = new PatAuthHandler(AZURE_DEVOPS_PAT!);
     azureDevOpsClient = new azdev.WebApi(orgUrl, authHandler, undefined, {
       productName: "AzureDevOps.MCP.Web",
       productVersion: packageVersion,
@@ -232,7 +232,7 @@ async function startServer() {
     // Test connection
     console.log("🚀 Initializing Azure DevOps MCP Server...");
     console.log(`📋 Organization: ${orgName}`);
-    console.log(`🔑 PAT Token: ${AZURE_DEVOPS_PAT.substring(0, 10)}...`);
+    console.log(`🔑 PAT Token: ${AZURE_DEVOPS_PAT!.substring(0, 10)}...`);
 
     console.log("🔍 Testing Azure DevOps connection...");
     const client = await getAzureDevOpsClient();
