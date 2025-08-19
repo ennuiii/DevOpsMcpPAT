@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: azure-devops-mcp-server
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server-web.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AZURE_DEVOPS_ORG
+        sync: false  # This will need to be set manually in Render dashboard
+      - key: AZURE_DEVOPS_PAT
+        sync: false  # This will need to be set manually in Render dashboard
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
