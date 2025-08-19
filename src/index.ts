@@ -109,7 +109,10 @@ async function main() {
 
   const userAgentComposer = new UserAgentComposer(packageVersion);
   server.server.oninitialized = () => {
-    userAgentComposer.appendMcpClientInfo(server.server.getClientVersion());
+    const clientInfo = server.server.getClientVersion();
+    if (clientInfo && clientInfo.name) {
+      userAgentComposer.appendMcpClientInfo(clientInfo);
+    }
   };
 
   configurePrompts(server);
