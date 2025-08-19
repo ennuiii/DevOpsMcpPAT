@@ -23,7 +23,7 @@
   "scripts": {
     "preinstall": "npm config set registry https://registry.npmjs.org/",
     "prebuild": "node -p \"'export const packageVersion = ' + JSON.stringify(require('./package.json').version) + ';\\n'\" > src/version.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.prod.json",
     "start": "node dist/server-web-simple.js",
     "dev": "npm run build && npm start",
     "watch": "tsc --watch",

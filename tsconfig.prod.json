@@ -1,0 +1,31 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": "src",
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "./src/server-web-simple.ts",
+    "./src/comprehensive-tools-complete.ts",
+    "./src/version.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "./src/tools.ts",
+    "./src/tools/**/*",
+    "./src/index.ts",
+    "./src/prompts.ts",
+    "./src/useragent.ts",
+    "./src/utils.ts"
+  ]
+}
