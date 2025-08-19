@@ -165,14 +165,29 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       type: "object",
       properties: {
         id: { type: "number" },
-        expand: { type: "string" }
+        project: { type: "string" },
+        fields: { 
+          type: "array",
+          items: { type: "string" }
+        },
+        asOf: { type: "string" },
+        expand: { 
+          type: "string",
+          enum: ["all", "fields", "links", "none", "relations"]
+        }
       },
-      required: ["id"]
+      required: ["id", "project"]
     },
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
-        const workItem = await witApi.getWorkItem(args.id, undefined, undefined, args.expand);
+        const workItem = await witApi.getWorkItem(
+          args.id, 
+          args.fields,
+          args.asOf ? new Date(args.asOf) : undefined,
+          args.expand,
+          args.project
+        );
         
         if (!workItem) {
           return { content: [{ type: "text", text: `Work item ${args.id} not found.` }], isError: true };
@@ -198,41 +213,41 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       type: "object",
       properties: {
         project: { type: "string" },
-        type: { type: "string" },
-        title: { type: "string" },
-        description: { type: "string" },
-        assignedTo: { type: "string" },
-        tags: { type: "string" },
-        areaPath: { type: "string" },
-        iterationPath: { type: "string" }
+        workItemType: { type: "string" },
+        fields: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              value: { type: "string" },
+              format: { 
+                type: "string",
+                enum: ["Html", "Markdown"]
+              }
+            },
+            required: ["name", "value"]
+          }
+        }
       },
-      required: ["project", "type", "title"]
+      required: ["project", "workItemType", "fields"]
     },
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
         
-        const patchDocument = [
-          { op: "add", path: "/fields/System.Title", value: args.title }
-        ];
+        const patchDocument = args.fields.map((field: any) => ({
+          op: "add",
+          path: `/fields/${field.name}`,
+          value: field.value
+        }));
         
-        if (args.description) {
-          patchDocument.push({ op: "add", path: "/fields/System.Description", value: args.description });
-        }
-        if (args.assignedTo) {
-          patchDocument.push({ op: "add", path: "/fields/System.AssignedTo", value: args.assignedTo });
-        }
-        if (args.tags) {
-          patchDocument.push({ op: "add", path: "/fields/System.Tags", value: args.tags });
-        }
-        if (args.areaPath) {
-          patchDocument.push({ op: "add", path: "/fields/System.AreaPath", value: args.areaPath });
-        }
-        if (args.iterationPath) {
-          patchDocument.push({ op: "add", path: "/fields/System.IterationPath", value: args.iterationPath });
-        }
-        
-        const workItem = await witApi.createWorkItem(null, patchDocument as any, args.project, args.type);
+        const workItem = await witApi.createWorkItem(
+          null, 
+          patchDocument as any, 
+          args.project, 
+          args.workItemType
+        );
         
         return {
           content: [{ type: "text", text: JSON.stringify(workItem) }]
@@ -254,44 +269,34 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       type: "object",
       properties: {
         id: { type: "number" },
-        title: { type: "string" },
-        description: { type: "string" },
-        assignedTo: { type: "string" },
-        state: { type: "string" },
-        tags: { type: "string" }
+        updates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              op: { 
+                type: "string",
+                enum: ["add", "replace", "remove", "copy", "move", "test"]
+              },
+              path: { type: "string" },
+              value: { type: "string" },
+              from: { type: "string" }
+            },
+            required: ["op", "path"]
+          }
+        }
       },
-      required: ["id"]
+      required: ["id", "updates"]
     },
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
         
-        const patchDocument = [];
-        
-        if (args.title) {
-          patchDocument.push({ op: "replace", path: "/fields/System.Title", value: args.title });
-        }
-        if (args.description) {
-          patchDocument.push({ op: "replace", path: "/fields/System.Description", value: args.description });
-        }
-        if (args.assignedTo) {
-          patchDocument.push({ op: "replace", path: "/fields/System.AssignedTo", value: args.assignedTo });
-        }
-        if (args.state) {
-          patchDocument.push({ op: "replace", path: "/fields/System.State", value: args.state });
-        }
-        if (args.tags) {
-          patchDocument.push({ op: "replace", path: "/fields/System.Tags", value: args.tags });
-        }
-        
-        if (patchDocument.length === 0) {
-          return {
-            content: [{ type: "text", text: `No updates specified for work item ${args.id}` }],
-            isError: true
-          };
-        }
-        
-        const workItem = await witApi.updateWorkItem(null, patchDocument as any, args.id);
+        const workItem = await witApi.updateWorkItem(
+          null, 
+          args.updates as any, 
+          args.id
+        );
         
         return {
           content: [{ type: "text", text: JSON.stringify(workItem) }]
@@ -315,12 +320,15 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         wiql: { type: "string" },
         project: { type: "string" }
       },
-      required: ["wiql"]
+      required: ["wiql", "project"]
     },
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
-        const queryResult = await witApi.queryByWiql({ query: args.wiql });
+        const queryResult = await witApi.queryByWiql(
+          { query: args.wiql },
+          { project: args.project }
+        );
         
         if (!queryResult.workItems || queryResult.workItems.length === 0) {
           return {
@@ -330,7 +338,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         const workItemIds = queryResult.workItems.map(wi => wi.id!);
-        const workItems = await witApi.getWorkItems(workItemIds);
+        const workItems = await witApi.getWorkItems(
+          workItemIds,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          args.project
+        );
         
         return {
           content: [{ type: "text", text: JSON.stringify(workItems) }]
@@ -2728,38 +2743,25 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       type: "object",
       properties: {
         project: { type: "string" },
-        assignedTo: { type: "string" },
-        top: { type: "number" }
-      }
+        type: { 
+          type: "string",
+          enum: ["assignedtome", "myactivity"]
+        },
+        top: { type: "number" },
+        includeCompleted: { type: "boolean" }
+      },
+      required: ["project"]
     },
     handler: async (args, connection) => {
       try {
-        const witApi = await connection.getWorkItemTrackingApi();
+        const workApi = await connection.getWorkApi();
         
-        let wiql = `SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType] FROM WorkItems`;
-        
-        const conditions = [];
-        if (args.assignedTo) {
-          conditions.push(`[System.AssignedTo] = '${args.assignedTo}'`);
-        } else {
-          conditions.push(`[System.AssignedTo] = @Me`);
-        }
-        
-        if (conditions.length > 0) {
-          wiql += ` WHERE ${conditions.join(' AND ')}`;
-        }
-        
-        const queryResult = await witApi.queryByWiql({ query: wiql }, args.project);
-        
-        if (!queryResult.workItems || queryResult.workItems.length === 0) {
-          return {
-            content: [{ type: "text", text: "No work items found assigned to you." }],
-            isError: true
-          };
-        }
-        
-        const ids = queryResult.workItems.map(wi => wi.id!);
-        const workItems = await witApi.getWorkItems(ids, undefined, undefined, undefined, undefined, args.project);
+        const workItems = await workApi.getPredefinedQueryResults(
+          args.project,
+          args.type || "assignedtome",
+          args.top || 50,
+          args.includeCompleted || false
+        );
         
         return {
           content: [{ type: "text", text: JSON.stringify(workItems) }]
@@ -2781,14 +2783,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       type: "object",
       properties: {
         project: { type: "string" },
-        teamId: { type: "string" }
+        team: { type: "string" }
       },
-      required: ["project", "teamId"]
+      required: ["project", "team"]
     },
     handler: async (args, connection) => {
       try {
         const workApi = await connection.getWorkApi();
-        const backlogs = await workApi.getBacklogs({ projectId: args.project, team: args.teamId });
+        const backlogs = await workApi.getBacklogs({ project: args.project, team: args.team });
         
         return {
           content: [{ type: "text", text: JSON.stringify(backlogs) }]
@@ -2809,31 +2811,35 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
     inputSchema: {
       type: "object",
       properties: {
+        project: { type: "string" },
         ids: { 
           type: "array",
           items: { type: "number" }
         },
-        project: { type: "string" },
         fields: {
           type: "array",
           items: { type: "string" }
-        },
-        expand: { 
-          type: "string", 
-          enum: ["None", "Relations", "Fields", "Links", "All"]
         }
       },
-      required: ["ids"]
+      required: ["project", "ids"]
     },
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
-        const workItems = await witApi.getWorkItems(
-          args.ids,
-          args.fields,
-          undefined,
-          args.expand,
-          undefined,
+        const defaultFields = [
+          "System.Id", 
+          "System.WorkItemType", 
+          "System.Title", 
+          "System.State", 
+          "System.Parent", 
+          "System.Tags", 
+          "Microsoft.VSTS.Common.StackRank", 
+          "System.AssignedTo"
+        ];
+        
+        const fieldsToUse = !args.fields || args.fields.length === 0 ? defaultFields : args.fields;
+        const workItems = await witApi.getWorkItemsBatch(
+          { ids: args.ids, fields: fieldsToUse }, 
           args.project
         );
         
@@ -2858,8 +2864,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       properties: {
         project: { type: "string" },
         workItemId: { type: "number" },
-        top: { type: "number" },
-        continuationToken: { type: "string" }
+        top: { type: "number" }
       },
       required: ["project", "workItemId"]
     },
@@ -2869,8 +2874,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const comments = await witApi.getComments(
           args.project,
           args.workItemId,
-          args.top,
-          args.continuationToken
+          args.top || 50
         );
         
         return {
@@ -2894,15 +2898,19 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       properties: {
         project: { type: "string" },
         workItemId: { type: "number" },
-        text: { type: "string" }
+        comment: { type: "string" },
+        format: { 
+          type: "string",
+          enum: ["html", "markdown"]
+        }
       },
-      required: ["project", "workItemId", "text"]
+      required: ["project", "workItemId", "comment"]
     },
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
         const comment = await witApi.addComment(
-          { text: args.text },
+          { text: args.comment },
           args.project,
           args.workItemId
         );
@@ -3016,19 +3024,24 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string" },
-        workItemId: { type: "number" },
+        projectId: { type: "string" },
         repositoryId: { type: "string" },
-        pullRequestId: { type: "number" }
+        pullRequestId: { type: "number" },
+        workItemId: { type: "number" },
+        pullRequestProjectId: { type: "string" }
       },
-      required: ["project", "workItemId", "repositoryId", "pullRequestId"]
+      required: ["projectId", "repositoryId", "pullRequestId", "workItemId"]
     },
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
         const gitApi = await connection.getGitApi();
         
-        const pullRequest = await gitApi.getPullRequest(args.repositoryId, args.pullRequestId, args.project);
+        const pullRequest = await gitApi.getPullRequest(
+          args.repositoryId, 
+          args.pullRequestId, 
+          args.pullRequestProjectId || args.projectId
+        );
         
         const updatedWorkItem = await witApi.updateWorkItem(
           [
@@ -3045,7 +3058,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
             }
           ],
           args.workItemId,
-          args.project
+          args.projectId
         );
         
         return {
@@ -3377,6 +3390,446 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
         return {
           content: [{ type: "text", text: `Error getting work item revisions: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  // Missing Microsoft work item tools
+  {
+    name: "wit_get_work_items_for_iteration",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        team: { type: "string" },
+        iterationId: { type: "string" }
+      },
+      required: ["project", "iterationId"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const workApi = await connection.getWorkApi();
+        const workItems = await workApi.getIterationWorkItems(
+          { project: args.project, team: args.team },
+          args.iterationId
+        );
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItems) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting iteration work items: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_list_backlog_work_items",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        team: { type: "string" },
+        backlogId: { type: "string" }
+      },
+      required: ["project", "team", "backlogId"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const workApi = await connection.getWorkApi();
+        const workItems = await workApi.getBacklogLevelWorkItems(
+          { project: args.project, team: args.team },
+          args.backlogId
+        );
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItems) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching backlog work items: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_get_work_item_type",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        workItemType: { type: "string" }
+      },
+      required: ["project", "workItemType"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        const workItemType = await witApi.getWorkItemType(args.project, args.workItemType);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItemType) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting work item type: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_get_query",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        query: { type: "string" },
+        expand: { 
+          type: "string",
+          enum: ["all", "clauses", "minimal", "none", "wiql"]
+        },
+        depth: { type: "number" },
+        includeDeleted: { type: "boolean" },
+        useIsoDateFormat: { type: "boolean" }
+      },
+      required: ["project", "query"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        const queryItem = await witApi.getQuery(
+          args.project,
+          args.query,
+          args.expand,
+          args.depth || 0,
+          args.includeDeleted || false,
+          args.useIsoDateFormat || false
+        );
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(queryItem) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting query: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_get_query_results_by_id",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        project: { type: "string" },
+        team: { type: "string" },
+        timePrecision: { type: "boolean" },
+        top: { type: "number" }
+      },
+      required: ["id"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        const teamContext = args.project || args.team ? { project: args.project, team: args.team } : undefined;
+        const queryResult = await witApi.queryById(
+          args.id,
+          teamContext,
+          args.timePrecision,
+          args.top || 50
+        );
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(queryResult) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting query results: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_update_work_items_batch",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        updates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              op: { 
+                type: "string",
+                enum: ["Add", "Replace", "Remove"]
+              },
+              id: { type: "number" },
+              path: { type: "string" },
+              value: { type: "string" },
+              format: { 
+                type: "string",
+                enum: ["Html", "Markdown"]
+              }
+            },
+            required: ["op", "id", "path"]
+          }
+        }
+      },
+      required: ["updates"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        const updatedItems = [];
+        
+        for (const update of args.updates) {
+          const patchDoc = [{
+            op: update.op.toLowerCase(),
+            path: update.path,
+            value: update.value
+          }];
+          
+          const updatedItem = await witApi.updateWorkItem(
+            null,
+            patchDoc as any,
+            update.id
+          );
+          updatedItems.push(updatedItem);
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(updatedItems) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error batch updating work items: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_work_items_link",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        id: { type: "number" },
+        linkToId: { type: "number" },
+        linkType: { 
+          type: "string",
+          enum: ["parent", "child", "duplicate", "duplicate of", "related", "successor", "predecessor", "tested by", "tests", "affects", "affected by"]
+        },
+        comment: { type: "string" }
+      },
+      required: ["project", "id", "linkToId", "linkType"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        
+        // Map friendly names to actual link types
+        const linkTypeMap: Record<string, string> = {
+          "parent": "System.LinkTypes.Hierarchy-Reverse",
+          "child": "System.LinkTypes.Hierarchy-Forward",
+          "duplicate": "System.LinkTypes.Duplicate-Forward",
+          "duplicate of": "System.LinkTypes.Duplicate-Reverse",
+          "related": "System.LinkTypes.Related",
+          "successor": "System.LinkTypes.Dependency-Forward",
+          "predecessor": "System.LinkTypes.Dependency-Reverse",
+          "tested by": "Microsoft.VSTS.Common.TestedBy-Forward",
+          "tests": "Microsoft.VSTS.Common.TestedBy-Reverse",
+          "affects": "Microsoft.VSTS.Common.Affects-Forward",
+          "affected by": "Microsoft.VSTS.Common.Affects-Reverse"
+        };
+        
+        const actualLinkType = linkTypeMap[args.linkType] || args.linkType;
+        
+        const updatedWorkItem = await witApi.updateWorkItem(
+          null,
+          [
+            {
+              op: "add",
+              path: "/relations/-",
+              value: {
+                rel: actualLinkType,
+                url: `${connection.serverUrl}/${args.project}/_apis/wit/workItems/${args.linkToId}`,
+                attributes: args.comment ? { comment: args.comment } : undefined
+              }
+            }
+          ] as any,
+          args.id,
+          args.project
+        );
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(updatedWorkItem) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error linking work items: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_work_item_unlink",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string" },
+        id: { type: "number" },
+        type: { type: "string" },
+        url: { type: "string" }
+      },
+      required: ["project", "id"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        
+        // If URL is provided, remove specific link
+        if (args.url) {
+          const workItem = await witApi.getWorkItem(args.id, undefined, undefined, undefined, args.project);
+          const relationIndex = workItem.relations?.findIndex(rel => rel.url === args.url);
+          
+          if (relationIndex !== undefined && relationIndex >= 0) {
+            const updatedWorkItem = await witApi.updateWorkItem(
+              null,
+              [
+                {
+                  op: "remove",
+                  path: `/relations/${relationIndex}`
+                }
+              ] as any,
+              args.id,
+              args.project
+            );
+            
+            return {
+              content: [{ type: "text", text: JSON.stringify(updatedWorkItem) }]
+            };
+          } else {
+            return {
+              content: [{ type: "text", text: `Link not found for work item ${args.id}` }],
+              isError: true
+            };
+          }
+        } else {
+          return {
+            content: [{ type: "text", text: "URL parameter is required to unlink work items" }],
+            isError: true
+          };
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error unlinking work items: ${errorMessage}` }],
+          isError: true
+        };
+      }
+    }
+  },
+
+  {
+    name: "wit_add_artifact_link",
+    
+    inputSchema: {
+      type: "object",
+      properties: {
+        workItemId: { type: "number" },
+        project: { type: "string" },
+        artifactUri: { type: "string" },
+        projectId: { type: "string" },
+        repositoryId: { type: "string" },
+        branchName: { type: "string" },
+        commitId: { type: "string" },
+        pullRequestId: { type: "number" },
+        buildId: { type: "number" },
+        linkType: { type: "string" },
+        comment: { type: "string" }
+      },
+      required: ["workItemId", "project"]
+    },
+    handler: async (args, connection) => {
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        
+        // Build artifact URI based on provided parameters
+        let artifactUri = args.artifactUri;
+        if (!artifactUri) {
+          if (args.pullRequestId && args.repositoryId) {
+            artifactUri = `vstfs:///Git/PullRequestId/${args.projectId || args.project}%2F${args.repositoryId}%2F${args.pullRequestId}`;
+          } else if (args.commitId && args.repositoryId) {
+            artifactUri = `vstfs:///Git/Commit/${args.projectId || args.project}%2F${args.repositoryId}%2F${args.commitId}`;
+          } else if (args.buildId) {
+            artifactUri = `vstfs:///Build/Build/${args.buildId}`;
+          }
+        }
+        
+        if (!artifactUri) {
+          return {
+            content: [{ type: "text", text: "Unable to construct artifact URI from provided parameters" }],
+            isError: true
+          };
+        }
+        
+        const updatedWorkItem = await witApi.updateWorkItem(
+          null,
+          [
+            {
+              op: "add",
+              path: "/relations/-",
+              value: {
+                rel: args.linkType || "ArtifactLink",
+                url: artifactUri,
+                attributes: args.comment ? { comment: args.comment } : undefined
+              }
+            }
+          ] as any,
+          args.workItemId,
+          args.project
+        );
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(updatedWorkItem) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error adding artifact link: ${errorMessage}` }],
           isError: true
         };
       }
