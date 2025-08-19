@@ -1093,7 +1093,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
         const pagesBatchRequest = {
           top: args.top || 20,
-          continuationToken: args.continuationToken,
+          continuationToken: args.continuationToken && args.continuationToken !== '' ? args.continuationToken : undefined,
           pageViewsForDays: args.pageViewsForDays
         };
 
@@ -1653,7 +1653,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const testPlans = await testPlanApi.getTestPlans(
           args.project, 
           owner, 
-          args.continuationToken, 
+          args.continuationToken && args.continuationToken !== '' ? args.continuationToken : undefined, 
           args.includePlanDetails || false, 
           args.filterActivePlans !== false
         );
