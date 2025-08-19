@@ -127,6 +127,7 @@ app.get("/health", (req, res) => {
 
 // SSE endpoint for MCP connection establishment
 app.get("/sse", (req, res) => {
+  const connectTime = Date.now();
   console.log("📡 SSE connection requested");
   
   // Set comprehensive SSE headers
@@ -160,7 +161,7 @@ app.get("/sse", (req, res) => {
   res.write(`event: message\n`);
   res.write(`data: ${JSON.stringify(helloMessage)}\n\n`);
 
-  // Heartbeat to keep connection alive
+  // Heartbeat to keep connection alive (every 15s to prevent 60s timeouts)
   const heartbeat = setInterval(() => {
     try {
       res.write(`: heartbeat ${Date.now()}\n\n`);
@@ -168,12 +169,13 @@ app.get("/sse", (req, res) => {
       console.log('💔 Heartbeat failed, client disconnected');
       clearInterval(heartbeat);
     }
-  }, 30000);
+  }, 15000);
 
   // Handle client disconnect
   req.on('close', () => {
     clearInterval(heartbeat);
-    console.log(`🔌 SSE client disconnected: ${sessionId}`);
+    const duration = Date.now() - connectTime;
+    console.log(`🔌 SSE client disconnected: ${sessionId} (lasted ${Math.round(duration/1000)}s)`);
   });
 });
 
