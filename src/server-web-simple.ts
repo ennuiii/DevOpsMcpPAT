@@ -68,14 +68,14 @@ async function getAzureDevOpsClient(): Promise<azdev.WebApi> {
 // Comprehensive tools without problematic imports
 const allTools: ComprehensiveTool[] = comprehensiveToolsComplete;
 
-// Tool utilities with aggressive size optimization
+// Tool utilities with balanced optimization (preserve MCP compatibility)
 function getToolsForMcp() {
   return allTools.map(tool => {
-    // Aggressive description shortening
-    const shortDesc = tool.description.length > 60 ? tool.description.substring(0, 57) + "..." : tool.description;
+    // Moderate description shortening (keep more readable)
+    const shortDesc = tool.description.length > 80 ? tool.description.substring(0, 77) + "..." : tool.description;
     
-    // Minimize schema by removing descriptions and optional properties
-    const minimalSchema = {
+    // Preserve schema structure but remove only descriptions
+    const optimizedSchema = {
       type: tool.inputSchema.type,
       properties: Object.fromEntries(
         Object.entries(tool.inputSchema.properties || {}).map(([key, prop]) => [
@@ -83,17 +83,28 @@ function getToolsForMcp() {
           {
             type: (prop as any).type,
             ...(((prop as any).enum) ? { enum: (prop as any).enum } : {}),
-            ...(((prop as any).required !== undefined) ? { required: (prop as any).required } : {})
+            // Keep all other properties that might be needed for MCP compatibility
+            ...Object.fromEntries(
+              Object.entries(prop as any).filter(([k, v]) => 
+                k !== 'description' && k !== 'type' && k !== 'enum'
+              )
+            )
           }
         ])
       ),
-      ...(tool.inputSchema.required ? { required: tool.inputSchema.required } : {})
+      ...(tool.inputSchema.required ? { required: tool.inputSchema.required } : {}),
+      // Preserve any other schema properties
+      ...Object.fromEntries(
+        Object.entries(tool.inputSchema).filter(([k, v]) => 
+          k !== 'type' && k !== 'properties' && k !== 'required'
+        )
+      )
     };
     
     return {
       name: tool.name,
       description: shortDesc,
-      inputSchema: minimalSchema
+      inputSchema: optimizedSchema
     };
   });
 }
@@ -308,11 +319,8 @@ app.post("/message", async (req, res) => {
       }
     } else if (mcpRequest.method === "notifications/initialized") {
       console.log("🎬 Client initialized notification received");
-      response = {
-        jsonrpc: "2.0",
-        id: mcpRequest.id,
-        result: {}
-      };
+      // Notifications don't need responses in MCP protocol
+      return res.status(200).end();
     } else if (mcpRequest.method === "ping") {
       console.log("🏓 Ping request received");
       response = {
@@ -491,11 +499,8 @@ app.post("/sse", async (req, res) => {
       }
     } else if (mcpRequest.method === "notifications/initialized") {
       console.log("🎬 Client initialized notification received");
-      response = {
-        jsonrpc: "2.0",
-        id: mcpRequest.id,
-        result: {}
-      };
+      // Notifications don't need responses in MCP protocol
+      return res.status(200).end();
     } else if (mcpRequest.method === "ping") {
       console.log("🏓 Ping request received");
       response = {
