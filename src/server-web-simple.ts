@@ -9,7 +9,7 @@ import * as azdev from "azure-devops-node-api";
 import { IRequestHandler } from "azure-devops-node-api/interfaces/common/VsoBaseInterfaces.js";
 
 import { packageVersion } from "./version.js";
-import { comprehensiveTools, ComprehensiveTool } from "./comprehensive-tools.js";
+import { comprehensiveToolsComplete, ComprehensiveTool } from "./comprehensive-tools-complete.js";
 
 // Environment variables
 const PORT = process.env.PORT || 3000;
@@ -66,7 +66,7 @@ async function getAzureDevOpsClient(): Promise<azdev.WebApi> {
 }
 
 // Comprehensive tools without problematic imports
-const allTools: ComprehensiveTool[] = comprehensiveTools;
+const allTools: ComprehensiveTool[] = comprehensiveToolsComplete;
 
 // Tool utilities
 function getToolsForMcp() {
