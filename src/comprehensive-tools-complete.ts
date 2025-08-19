@@ -72,7 +72,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(filteredProjects, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(filteredProjects) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -107,7 +107,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(teams, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(teams) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -180,7 +180,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(workItem) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -236,7 +236,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const workItem = await witApi.createWorkItem(null, patchDocument as any, args.project, args.type);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(workItem) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -295,7 +295,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const workItem = await witApi.updateWorkItem(null, patchDocument as any, args.id);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(workItem) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -334,7 +334,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const workItems = await witApi.getWorkItems(workItemIds);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(workItems) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -364,7 +364,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const result = await witApi.deleteWorkItem(args.id, undefined, args.destroy);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -422,7 +422,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(buildDefinitions, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(buildDefinitions) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -482,7 +482,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(builds, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(builds) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -527,7 +527,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const pipelineRun = await pipelinesApi.runPipeline(runRequest, args.project, args.definitionId);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(pipelineRun, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(pipelineRun) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -563,7 +563,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(build, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(build) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -599,7 +599,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(logs, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(logs) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -638,7 +638,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(logLines, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(logLines) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -675,7 +675,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(changes, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(changes) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -711,7 +711,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(revisions, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(revisions) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -751,7 +751,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
         
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -788,7 +788,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(repositories, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(repositories) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -824,7 +824,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(repository, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(repository) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -860,7 +860,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(branches, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(branches) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -903,7 +903,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(commits, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(commits) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -946,7 +946,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(pullRequests, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(pullRequests) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -991,7 +991,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(items, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(items) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1025,7 +1025,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(wikis, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(wikis) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1061,7 +1061,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(wiki, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(wiki) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1104,7 +1104,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(pages, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(pages) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1188,7 +1188,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
 
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1247,7 +1247,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
 
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1290,7 +1290,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
 
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1339,7 +1339,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
 
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1382,7 +1382,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(iterations, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(iterations) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1418,7 +1418,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(teamSettings, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(teamSettings) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1454,7 +1454,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(teamFieldValues, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(teamFieldValues) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1496,7 +1496,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(definitions, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(definitions) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1545,7 +1545,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(releases, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(releases) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1581,7 +1581,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const release = await releaseApi.createRelease(releaseStartMetadata, args.project);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(release, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(release) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1617,7 +1617,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(release, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(release) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1666,7 +1666,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(testPlans, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(testPlans) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1706,7 +1706,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const testPlan = await testPlanApi.createTestPlan(testPlanCreateParams, args.project);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(testPlan, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(testPlan) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1750,7 +1750,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const testCase = await witApi.createWorkItem(null, patchDocument as any, args.project, "Test Case");
         
         return {
-          content: [{ type: "text", text: JSON.stringify(testCase, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(testCase) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1792,7 +1792,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         const workItems = await witApi.getWorkItems(limitedIds);
         
         return {
-          content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(workItems) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1828,7 +1828,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
         
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1864,7 +1864,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(testResults, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(testResults) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1920,7 +1920,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
         
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1958,7 +1958,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         };
         
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(result) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -1996,7 +1996,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(workItem) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -2029,7 +2029,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(filteredProjects, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(filteredProjects) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -2066,7 +2066,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(definitions, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(definitions) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -2116,7 +2116,7 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         }
         
         return {
-          content: [{ type: "text", text: JSON.stringify(builds, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(builds) }]
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";

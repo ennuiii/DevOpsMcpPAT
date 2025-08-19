@@ -68,13 +68,40 @@ async function getAzureDevOpsClient(): Promise<azdev.WebApi> {
 // Comprehensive tools without problematic imports
 const allTools: ComprehensiveTool[] = comprehensiveToolsComplete;
 
-// Tool utilities
+// Tool utilities with aggressive size optimization
 function getToolsForMcp() {
-  return allTools.map(tool => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema
-  }));
+  return allTools.map(tool => {
+    // Aggressive description shortening
+    const shortDesc = tool.description.length > 60 ? tool.description.substring(0, 57) + "..." : tool.description;
+    
+    // Minimize schema by removing descriptions and optional properties
+    const minimalSchema = {
+      type: tool.inputSchema.type,
+      properties: Object.fromEntries(
+        Object.entries(tool.inputSchema.properties || {}).map(([key, prop]) => [
+          key, 
+          {
+            type: (prop as any).type,
+            ...(((prop as any).enum) ? { enum: (prop as any).enum } : {}),
+            ...(((prop as any).required !== undefined) ? { required: (prop as any).required } : {})
+          }
+        ])
+      ),
+      ...(tool.inputSchema.required ? { required: tool.inputSchema.required } : {})
+    };
+    
+    return {
+      name: tool.name,
+      description: shortDesc,
+      inputSchema: minimalSchema
+    };
+  });
+}
+
+// Token counting utility
+function getTokenCount(text: string): number {
+  // Rough approximation: ~4 characters per token
+  return Math.ceil(text.length / 4);
 }
 
 function getTool(name: string): ComprehensiveTool | undefined {
@@ -154,7 +181,7 @@ app.get("/sse", (req, res) => {
 app.post("/message", async (req, res) => {
   const sessionId = req.query.sessionId as string;
   console.log(`📨 MCP JSON-RPC Request received on POST /message with session: ${sessionId}`);
-  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+  console.log("📝 Request body:", JSON.stringify(req.body));
   
   try {
     const mcpRequest = req.body;
@@ -315,7 +342,10 @@ app.post("/message", async (req, res) => {
       };
     }
 
-    console.log("📤 MCP Response:", JSON.stringify(response, null, 2));
+    const responseStr = JSON.stringify(response);
+    const tokenCount = getTokenCount(responseStr);
+    const sizeBytes = Buffer.byteLength(responseStr, 'utf8');
+    console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t]:`, responseStr.length > 200 ? responseStr.substring(0, 200) + '...' : responseStr);
     res.json(response);
     
   } catch (error: any) {
@@ -334,7 +364,7 @@ app.post("/message", async (req, res) => {
 // POST /sse endpoint for MCP JSON-RPC requests (Cursor/MCP client style)
 app.post("/sse", async (req, res) => {
   console.log("📨 MCP JSON-RPC Request received on POST /sse");
-  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+  console.log("📝 Request body:", JSON.stringify(req.body));
   
   try {
     const mcpRequest = req.body;
@@ -495,7 +525,10 @@ app.post("/sse", async (req, res) => {
       };
     }
 
-    console.log("📤 MCP Response:", JSON.stringify(response, null, 2));
+    const responseStr = JSON.stringify(response);
+    const tokenCount = getTokenCount(responseStr);
+    const sizeBytes = Buffer.byteLength(responseStr, 'utf8');
+    console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t]:`, responseStr.length > 200 ? responseStr.substring(0, 200) + '...' : responseStr);
     res.json(response);
     
   } catch (error: any) {
@@ -537,7 +570,7 @@ app.post("/api/tools/wit_get_work_item", async (req, res) => {
             assignedTo: workItem.fields!["System.AssignedTo"]?.displayName,
             createdDate: workItem.fields!["System.CreatedDate"],
             description: workItem.fields!["System.Description"]
-          }, null, 2)
+          })
         }]
       }
     });
@@ -566,7 +599,7 @@ app.post("/api/tools/core_list_projects", async (req, res) => {
             name: p.name,
             description: p.description,
             state: p.state
-          })), null, 2)
+          })))
         }]
       }
     });
@@ -603,7 +636,7 @@ app.post("/api/tools/build_get_builds", async (req, res) => {
             result: b.result,
             startTime: b.startTime,
             finishTime: b.finishTime
-          })), null, 2)
+          })))
         }]
       }
     });
