@@ -9,6 +9,8 @@ import * as azdev from "azure-devops-node-api";
 import { IRequestHandler } from "azure-devops-node-api/interfaces/common/VsoBaseInterfaces.js";
 
 import { packageVersion } from "./version.js";
+import { ToolCollector } from "./tool-collector.js";
+import { ToolDefinition } from "./tool-registry.js";
 
 // Environment variables
 const PORT = process.env.PORT || 3000;
@@ -62,6 +64,33 @@ async function getAzureDevOpsClient(): Promise<azdev.WebApi> {
     });
   }
   return azureDevOpsClient;
+}
+
+// Tool Registry Setup
+const toolCollector = new ToolCollector();
+let allTools: ToolDefinition[] = [];
+
+// Providers for tool registration
+const tokenProvider = async () => ({
+  token: AZURE_DEVOPS_PAT!,
+  expiresOnTimestamp: Date.now() + 3600000 // 1 hour from now
+});
+
+const connectionProvider = async () => getAzureDevOpsClient();
+
+const userAgentProvider = () => `AzureDevOps.MCP.Web/${packageVersion}`;
+
+// Initialize all tools
+async function initializeTools() {
+  console.log("🚀 Initializing comprehensive tool registry...");
+  try {
+    allTools = await toolCollector.collectAllTools(tokenProvider, connectionProvider, userAgentProvider);
+    console.log(`✅ Successfully initialized ${allTools.length} tools`);
+    console.log("📋 Available tools:", allTools.map(t => t.name).join(", "));
+  } catch (error) {
+    console.error("❌ Failed to initialize tools:", error);
+    allTools = []; // Fallback to empty tools
+  }
 }
 
 // Create Express app
@@ -205,94 +234,24 @@ app.post("/message", async (req, res) => {
         jsonrpc: "2.0",
         id: mcpRequest.id,
         result: {
-          tools: [
-            {
-              name: "get_work_item",
-              description: "Get a work item by ID",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  workItemId: { type: "number", description: "Work item ID" }
-                },
-                required: ["workItemId"]
-              }
-            },
-            {
-              name: "list_projects",
-              description: "List all projects in Azure DevOps",
-              inputSchema: {
-                type: "object",
-                properties: {}
-              }
-            },
-            {
-              name: "get_project",
-              description: "Get details of a specific project",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  projectId: { type: "string", description: "Project ID or name" }
-                },
-                required: ["projectId"]
-              }
-            }
-          ]
+          tools: toolCollector.getToolsForMcp()
         }
       };
     } else if (mcpRequest.method === "tools/call") {
       const { name, arguments: args } = mcpRequest.params;
       
       try {
-        let result: string;
+        console.log(`🎯 Calling tool: ${name} with args:`, args);
         
-        if (name === "get_work_item") {
-          const { workItemId } = args;
-          if (!workItemId) {
-            throw new Error("workItemId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const witApi = await client.getWorkItemTrackingApi();
-          const workItem = await witApi.getWorkItem(workItemId);
-          
-          result = `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
-                   `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
-                   `**State**: ${workItem.fields!["System.State"]}\n` +
-                   `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
-                   `**Created**: ${workItem.fields!["System.CreatedDate"]}`;
-        } else if (name === "list_projects") {
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const projects = await coreApi.getProjects();
-          
-          const projectList = projects.map((project: any) => {
-            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
-          }).join('\n');
-          
-          result = `# Projects (${projects.length})\n\n${projectList}`;
-        } else if (name === "get_project") {
-          const { projectId } = args;
-          if (!projectId) {
-            throw new Error("projectId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const project = await coreApi.getProject(projectId);
-          
-          if (!project) {
-            result = `Project ${projectId} not found.`;
-          } else {
-            result = `# Project: ${project.name}\n\n` +
-                     `**ID**: ${project.id}\n` +
-                     `**Description**: ${project.description || "No description"}\n` +
-                     `**State**: ${project.state}\n` +
-                     `**Visibility**: ${project.visibility}\n` +
-                     `**URL**: ${project.url}`;
-          }
-        } else {
-          throw new Error(`Tool ${name} not supported`);
+        // Find the tool in our registry
+        const tool = toolCollector.getTool(name);
+        if (!tool) {
+          throw new Error(`Tool ${name} not found`);
         }
+        
+        // Execute the tool
+        const connection = await getAzureDevOpsClient();
+        const result = await tool.handler(args, connection);
         
         response = {
           jsonrpc: "2.0",
@@ -441,94 +400,24 @@ app.post("/sse", async (req, res) => {
         jsonrpc: "2.0",
         id: mcpRequest.id,
         result: {
-          tools: [
-            {
-              name: "get_work_item",
-              description: "Get a work item by ID",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  workItemId: { type: "number", description: "Work item ID" }
-                },
-                required: ["workItemId"]
-              }
-            },
-            {
-              name: "list_projects",
-              description: "List all projects in Azure DevOps",
-              inputSchema: {
-                type: "object",
-                properties: {}
-              }
-            },
-            {
-              name: "get_project",
-              description: "Get details of a specific project",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  projectId: { type: "string", description: "Project ID or name" }
-                },
-                required: ["projectId"]
-              }
-            }
-          ]
+          tools: toolCollector.getToolsForMcp()
         }
       };
     } else if (mcpRequest.method === "tools/call") {
       const { name, arguments: args } = mcpRequest.params;
       
       try {
-        let result: string;
+        console.log(`🎯 Calling tool: ${name} with args:`, args);
         
-        if (name === "get_work_item") {
-          const { workItemId } = args;
-          if (!workItemId) {
-            throw new Error("workItemId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const witApi = await client.getWorkItemTrackingApi();
-          const workItem = await witApi.getWorkItem(workItemId);
-          
-          result = `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
-                   `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
-                   `**State**: ${workItem.fields!["System.State"]}\n` +
-                   `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
-                   `**Created**: ${workItem.fields!["System.CreatedDate"]}`;
-        } else if (name === "list_projects") {
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const projects = await coreApi.getProjects();
-          
-          const projectList = projects.map((project: any) => {
-            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
-          }).join('\n');
-          
-          result = `# Projects (${projects.length})\n\n${projectList}`;
-        } else if (name === "get_project") {
-          const { projectId } = args;
-          if (!projectId) {
-            throw new Error("projectId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const project = await coreApi.getProject(projectId);
-          
-          if (!project) {
-            result = `Project ${projectId} not found.`;
-          } else {
-            result = `# Project: ${project.name}\n\n` +
-                     `**ID**: ${project.id}\n` +
-                     `**Description**: ${project.description || "No description"}\n` +
-                     `**State**: ${project.state}\n` +
-                     `**Visibility**: ${project.visibility}\n` +
-                     `**URL**: ${project.url}`;
-          }
-        } else {
-          throw new Error(`Tool ${name} not supported`);
+        // Find the tool in our registry
+        const tool = toolCollector.getTool(name);
+        if (!tool) {
+          throw new Error(`Tool ${name} not found`);
         }
+        
+        // Execute the tool
+        const connection = await getAzureDevOpsClient();
+        const result = await tool.handler(args, connection);
         
         response = {
           jsonrpc: "2.0",
@@ -779,38 +668,7 @@ app.post("/mcp", async (req, res) => {
         jsonrpc: "2.0",
         id: request.id,
         result: {
-          tools: [
-            {
-              name: "get_work_item",
-              description: "Get a work item by ID",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  workItemId: { type: "number", description: "Work item ID" }
-                },
-                required: ["workItemId"]
-              }
-            },
-            {
-              name: "list_projects",
-              description: "List all projects in Azure DevOps",
-              inputSchema: {
-                type: "object",
-                properties: {}
-              }
-            },
-            {
-              name: "get_project",
-              description: "Get details of a specific project",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  projectId: { type: "string", description: "Project ID or name" }
-                },
-                required: ["projectId"]
-              }
-            }
-          ]
+          tools: toolCollector.getToolsForMcp()
         }
       };
       return res.json(response);
@@ -962,6 +820,9 @@ async function startServer() {
     const coreApi = await client.getCoreApi();
     const projects = await coreApi.getProjects();
     console.log(`✅ Connected successfully! Found ${projects.length} project(s)`);
+    
+    // Initialize comprehensive tool registry
+    await initializeTools();
     
     app.listen(PORT, () => {
       console.log(`🌐 Azure DevOps MCP Server running on port ${PORT}`);
