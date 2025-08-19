@@ -111,7 +111,7 @@ async function main() {
   server.server.oninitialized = () => {
     const clientInfo = server.server.getClientVersion();
     if (clientInfo && clientInfo.name) {
-      userAgentComposer.appendMcpClientInfo(clientInfo);
+      userAgentComposer.appendMcpClientInfo(clientInfo as any);
     }
   };
 
