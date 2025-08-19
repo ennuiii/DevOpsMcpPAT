@@ -1,33 +1,55 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AccessToken } from "@azure/identity";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebApi } from "azure-devops-node-api";
-import { z } from "zod";
 import { WikiPagesBatchRequest } from "azure-devops-node-api/interfaces/WikiInterfaces.js";
 
-const WIKI_TOOLS = {
-  list_wikis: "wiki_list_wikis",
-  get_wiki: "wiki_get_wiki",
-  list_wiki_pages: "wiki_list_pages",
-  get_wiki_page_content: "wiki_get_page_content",
-  create_or_update_page: "wiki_create_or_update_page",
-};
+// Tool definition interface to match Microsoft's exact format
+export interface MicrosoftTool {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: string;
+    properties: Record<string, any>;
+    required?: string[];
+  };
+  handler: (args: any, connection: WebApi, tokenProvider?: () => Promise<{ token: string }>) => Promise<{
+    content: Array<{ type: string; text: string }>;
+    isError?: boolean;
+  }>;
+}
 
-function configureWikiTools(server: McpServer, tokenProvider: () => Promise<AccessToken>, connectionProvider: () => Promise<WebApi>) {
-  server.tool(
-    WIKI_TOOLS.get_wiki,
-    "Get the wiki by wikiIdentifier",
-    {
-      wikiIdentifier: z.string().describe("The unique identifier of the wiki."),
-      project: z.string().optional().describe("The project name or ID where the wiki is located. If not provided, the default project will be used."),
+// Helper function to stream to string - exactly as Microsoft implements
+function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    stream.setEncoding("utf8");
+    stream.on("data", (chunk) => (data += chunk));
+    stream.on("end", () => resolve(data));
+    stream.on("error", reject);
+  });
+}
+
+// Exact Microsoft implementation of all tools
+export const microsoftExactTools: MicrosoftTool[] = [
+  // ============================================================================
+  // WIKI TOOLS - Exact Microsoft Implementation
+  // ============================================================================
+  {
+    name: "wiki_get_wiki",
+    description: "Get the wiki by wikiIdentifier",
+    inputSchema: {
+      type: "object",
+      properties: {
+        wikiIdentifier: { type: "string", description: "The unique identifier of the wiki." },
+        project: { type: "string", description: "The project name or ID where the wiki is located. If not provided, the default project will be used." }
+      },
+      required: ["wikiIdentifier"]
     },
-    async ({ wikiIdentifier, project }) => {
+    handler: async (args, connection) => {
       try {
-        const connection = await connectionProvider();
         const wikiApi = await connection.getWikiApi();
-        const wiki = await wikiApi.getWiki(wikiIdentifier, project);
+        const wiki = await wikiApi.getWiki(args.wikiIdentifier, args.project);
 
         if (!wiki) {
           return { content: [{ type: "text", text: "No wiki found" }], isError: true };
@@ -45,19 +67,21 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
         };
       }
     }
-  );
+  },
 
-  server.tool(
-    WIKI_TOOLS.list_wikis,
-    "Retrieve a list of wikis for an organization or project.",
-    {
-      project: z.string().optional().describe("The project name or ID to filter wikis. If not provided, all wikis in the organization will be returned."),
+  {
+    name: "wiki_list_wikis",
+    description: "Retrieve a list of wikis for an organization or project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "The project name or ID to filter wikis. If not provided, all wikis in the organization will be returned." }
+      }
     },
-    async ({ project }) => {
+    handler: async (args, connection) => {
       try {
-        const connection = await connectionProvider();
         const wikiApi = await connection.getWikiApi();
-        const wikis = await wikiApi.getAllWikis(project);
+        const wikis = await wikiApi.getAllWikis(args.project);
 
         if (!wikis) {
           return { content: [{ type: "text", text: "No wikis found" }], isError: true };
@@ -75,30 +99,33 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
         };
       }
     }
-  );
+  },
 
-  server.tool(
-    WIKI_TOOLS.list_wiki_pages,
-    "Retrieve a list of wiki pages for a specific wiki and project.",
-    {
-      wikiIdentifier: z.string().describe("The unique identifier of the wiki."),
-      project: z.string().describe("The project name or ID where the wiki is located."),
-      top: z.number().default(20).describe("The maximum number of pages to return. Defaults to 20."),
-      continuationToken: z.string().optional().describe("Token for pagination to retrieve the next set of pages."),
-      pageViewsForDays: z.number().optional().describe("Number of days to retrieve page views for. If not specified, page views are not included."),
+  {
+    name: "wiki_list_pages",
+    description: "Retrieve a list of wiki pages for a specific wiki and project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        wikiIdentifier: { type: "string", description: "The unique identifier of the wiki." },
+        project: { type: "string", description: "The project name or ID where the wiki is located." },
+        top: { type: "number", default: 20, description: "The maximum number of pages to return. Defaults to 20." },
+        continuationToken: { type: "string", description: "Token for pagination to retrieve the next set of pages." },
+        pageViewsForDays: { type: "number", description: "Number of days to retrieve page views for. If not specified, page views are not included." }
+      },
+      required: ["wikiIdentifier", "project"]
     },
-    async ({ wikiIdentifier, project, top = 20, continuationToken, pageViewsForDays }) => {
+    handler: async (args, connection) => {
       try {
-        const connection = await connectionProvider();
         const wikiApi = await connection.getWikiApi();
 
         const pagesBatchRequest: WikiPagesBatchRequest = {
-          top,
-          continuationToken,
-          pageViewsForDays,
+          top: args.top || 20,
+          continuationToken: args.continuationToken,
+          pageViewsForDays: args.pageViewsForDays,
         };
 
-        const pages = await wikiApi.getPagesBatch(pagesBatchRequest, project, wikiIdentifier);
+        const pages = await wikiApi.getPagesBatch(pagesBatchRequest, args.project, args.wikiIdentifier);
 
         if (!pages) {
           return { content: [{ type: "text", text: "No wiki pages found" }], isError: true };
@@ -116,22 +143,25 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
         };
       }
     }
-  );
+  },
 
-  server.tool(
-    WIKI_TOOLS.get_wiki_page_content,
-    "Retrieve wiki page content by wikiIdentifier and path.",
-    {
-      wikiIdentifier: z.string().describe("The unique identifier of the wiki."),
-      project: z.string().describe("The project name or ID where the wiki is located."),
-      path: z.string().describe("The path of the wiki page to retrieve content for."),
+  {
+    name: "wiki_get_page_content",
+    description: "Retrieve wiki page content by wikiIdentifier and path.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        wikiIdentifier: { type: "string", description: "The unique identifier of the wiki." },
+        project: { type: "string", description: "The project name or ID where the wiki is located." },
+        path: { type: "string", description: "The path of the wiki page to retrieve content for." }
+      },
+      required: ["wikiIdentifier", "project", "path"]
     },
-    async ({ wikiIdentifier, project, path }) => {
+    handler: async (args, connection) => {
       try {
-        const connection = await connectionProvider();
         const wikiApi = await connection.getWikiApi();
 
-        const stream = await wikiApi.getPageText(project, wikiIdentifier, path, undefined, undefined, true);
+        const stream = await wikiApi.getPageText(args.project, args.wikiIdentifier, args.path, undefined, undefined, true);
 
         if (!stream) {
           return { content: [{ type: "text", text: "No wiki page content found" }], isError: true };
@@ -151,31 +181,38 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
         };
       }
     }
-  );
+  },
 
-  server.tool(
-    WIKI_TOOLS.create_or_update_page,
-    "Create or update a wiki page with content.",
-    {
-      wikiIdentifier: z.string().describe("The unique identifier or name of the wiki."),
-      path: z.string().describe("The path of the wiki page (e.g., '/Home' or '/Documentation/Setup')."),
-      content: z.string().describe("The content of the wiki page in markdown format."),
-      project: z.string().optional().describe("The project name or ID where the wiki is located. If not provided, the default project will be used."),
-      etag: z.string().optional().describe("ETag for editing existing pages (optional, will be fetched if not provided)."),
+  {
+    name: "wiki_create_or_update_page",
+    description: "Create or update a wiki page with content.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        wikiIdentifier: { type: "string", description: "The unique identifier or name of the wiki." },
+        path: { type: "string", description: "The path of the wiki page (e.g., '/Home' or '/Documentation/Setup')." },
+        content: { type: "string", description: "The content of the wiki page in markdown format." },
+        project: { type: "string", description: "The project name or ID where the wiki is located. If not provided, the default project will be used." },
+        etag: { type: "string", description: "ETag for editing existing pages (optional, will be fetched if not provided)." }
+      },
+      required: ["wikiIdentifier", "path", "content"]
     },
-    async ({ wikiIdentifier, path, content, project, etag }) => {
+    handler: async (args, connection, tokenProvider) => {
       try {
-        const connection = await connectionProvider();
+        if (!tokenProvider) {
+          throw new Error("Token provider is required for wiki page creation/update");
+        }
+        
         const accessToken = await tokenProvider();
 
         // Normalize the path
-        const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+        const normalizedPath = args.path.startsWith("/") ? args.path : `/${args.path}`;
         const encodedPath = encodeURIComponent(normalizedPath);
 
         // Build the URL for the wiki page API
         const baseUrl = connection.serverUrl;
-        const projectParam = project || "";
-        const url = `${baseUrl}/${projectParam}/_apis/wiki/wikis/${wikiIdentifier}/pages?path=${encodedPath}&api-version=7.1`;
+        const projectParam = args.project || "";
+        const url = `${baseUrl}/${projectParam}/_apis/wiki/wikis/${args.wikiIdentifier}/pages?path=${encodedPath}&api-version=7.1`;
 
         // First, try to create a new page (PUT without ETag)
         try {
@@ -185,7 +222,7 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
               "Authorization": `Bearer ${accessToken.token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ content: content }),
+            body: JSON.stringify({ content: args.content }),
           });
 
           if (createResponse.ok) {
@@ -203,7 +240,7 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
           // If creation failed with 409 (Conflict) or 500 (Page exists), try to update it
           if (createResponse.status === 409 || createResponse.status === 500) {
             // Page exists, we need to get the ETag and update it
-            let currentEtag = etag;
+            let currentEtag = args.etag;
 
             if (!currentEtag) {
               // Fetch current page to get ETag
@@ -235,7 +272,7 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
                 "Content-Type": "application/json",
                 "If-Match": currentEtag,
               },
-              body: JSON.stringify({ content: content }),
+              body: JSON.stringify({ content: args.content }),
             });
 
             if (updateResponse.ok) {
@@ -268,17 +305,5 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
         };
       }
     }
-  );
-}
-
-function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    stream.setEncoding("utf8");
-    stream.on("data", (chunk) => (data += chunk));
-    stream.on("end", () => resolve(data));
-    stream.on("error", reject);
-  });
-}
-
-export { WIKI_TOOLS, configureWikiTools };
+  }
+];

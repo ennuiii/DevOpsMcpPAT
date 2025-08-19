@@ -240,16 +240,31 @@ app.post("/message", async (req, res) => {
         const connection = await getAzureDevOpsClient();
         const result = await tool.handler(args, connection);
         
-        response = {
-          jsonrpc: "2.0",
-          id: mcpRequest.id,
-          result: {
-            content: [{
-              type: "text",
-              text: result
-            }]
-          }
-        };
+        // Handle both new Microsoft format and legacy string format
+        if (typeof result === 'string') {
+          response = {
+            jsonrpc: "2.0",
+            id: mcpRequest.id,
+            result: {
+              content: [{
+                type: "text",
+                text: result
+              }]
+            }
+          };
+        } else {
+          // Microsoft format with structured content and isError
+          response = {
+            jsonrpc: "2.0",
+            id: mcpRequest.id,
+            result: result.isError ? undefined : result,
+            error: result.isError ? {
+              code: -32603,
+              message: "Tool execution error",
+              data: result.content[0]?.text || "Unknown error"
+            } : undefined
+          };
+        }
       } catch (error: any) {
         console.error("❌ Error executing tool:", error);
         response = {
@@ -405,16 +420,31 @@ app.post("/sse", async (req, res) => {
         const connection = await getAzureDevOpsClient();
         const result = await tool.handler(args, connection);
         
-        response = {
-          jsonrpc: "2.0",
-          id: mcpRequest.id,
-          result: {
-            content: [{
-              type: "text",
-              text: result
-            }]
-          }
-        };
+        // Handle both new Microsoft format and legacy string format
+        if (typeof result === 'string') {
+          response = {
+            jsonrpc: "2.0",
+            id: mcpRequest.id,
+            result: {
+              content: [{
+                type: "text",
+                text: result
+              }]
+            }
+          };
+        } else {
+          // Microsoft format with structured content and isError
+          response = {
+            jsonrpc: "2.0",
+            id: mcpRequest.id,
+            result: result.isError ? undefined : result,
+            error: result.isError ? {
+              code: -32603,
+              message: "Tool execution error",
+              data: result.content[0]?.text || "Unknown error"
+            } : undefined
+          };
+        }
       } catch (error: any) {
         console.error("❌ Error executing tool:", error);
         response = {

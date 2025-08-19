@@ -1,14 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { AccessToken } from "@azure/identity";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebApi } from "azure-devops-node-api";
-
-// Simple interface to replace Azure Identity AccessToken
-interface AccessToken {
-  token: string;
-  expiresOnTimestamp: number;
-}
 
 import { configureAdvSecTools } from "./tools/advsec.js";
 import { configureBuildTools } from "./tools/builds.js";

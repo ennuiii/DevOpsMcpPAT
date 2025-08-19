@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Simple interface to replace Azure Identity AccessToken
-interface AccessToken {
-  token: string;
-  expiresOnTimestamp: number;
-}
+import { AccessToken } from "@azure/identity";
 import { WebApi } from "azure-devops-node-api";
 
 async function getCurrentUserDetails(tokenProvider: () => Promise<AccessToken>, connectionProvider: () => Promise<WebApi>, userAgentProvider: () => string) {

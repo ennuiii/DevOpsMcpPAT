@@ -3,7 +3,7 @@
 
 import { WebApi } from "azure-devops-node-api";
 
-// Comprehensive tool definitions without external dependencies
+// Microsoft-compatible tool definitions
 export interface ComprehensiveTool {
   name: string;
   description: string;
@@ -12,7 +12,10 @@ export interface ComprehensiveTool {
     properties: Record<string, any>;
     required?: string[];
   };
-  handler: (args: any, connection: WebApi) => Promise<string>;
+  handler: (args: any, connection: WebApi) => Promise<{
+    content: Array<{ type: string; text: string }>;
+    isError?: boolean;
+  } | string>; // Support both formats during transition
 }
 
 // Helper function to stream to string
@@ -48,26 +51,36 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       }
     },
     handler: async (args, connection) => {
-      const coreApi = await connection.getCoreApi();
-      const projects = await coreApi.getProjects(
-        args.stateFilter || "wellFormed", 
-        args.top, 
-        args.skip, 
-        args.continuationToken, 
-        false
-      );
-      
-      let filteredProjects = projects;
-      if (args.projectNameFilter) {
-        const lowerFilter = args.projectNameFilter.toLowerCase();
-        filteredProjects = projects.filter(p => p.name?.toLowerCase().includes(lowerFilter));
+      try {
+        const coreApi = await connection.getCoreApi();
+        const projects = await coreApi.getProjects(
+          args.stateFilter || "wellFormed", 
+          args.top, 
+          args.skip, 
+          args.continuationToken, 
+          false
+        );
+        
+        let filteredProjects = projects;
+        if (args.projectNameFilter) {
+          const lowerFilter = args.projectNameFilter.toLowerCase();
+          filteredProjects = projects.filter(p => p.name?.toLowerCase().includes(lowerFilter));
+        }
+        
+        if (!filteredProjects || filteredProjects.length === 0) {
+          return { content: [{ type: "text", text: "No projects found in the organization." }], isError: true };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(filteredProjects, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching projects: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const projectList = filteredProjects.map(p => 
-        `- **${p.name}**: ${p.description || "No description"} (ID: ${p.id}, State: ${p.state})`
-      ).join('\\n');
-      
-      return `# Projects (${filteredProjects.length})\\n\\n${projectList}`;
     }
   },
 
@@ -85,18 +98,24 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const coreApi = await connection.getCoreApi();
-      const teams = await coreApi.getTeams(args.project, args.mine, args.top, args.skip, false);
-      
-      if (!teams || teams.length === 0) {
-        return `No teams found for project: ${args.project}`;
+      try {
+        const coreApi = await connection.getCoreApi();
+        const teams = await coreApi.getTeams(args.project, args.mine, args.top, args.skip, false);
+        
+        if (!teams || teams.length === 0) {
+          return { content: [{ type: "text", text: `No teams found for project: ${args.project}` }], isError: true };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(teams, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching teams: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const teamList = teams.map(t => 
-        `- **${t.name}**: ${t.description || "No description"} (ID: ${t.id})`
-      ).join('\\n');
-      
-      return `# Teams in ${args.project} (${teams.length})\\n\\n${teamList}`;
     }
   },
 
@@ -111,18 +130,29 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["searchFilter"]
     },
     handler: async (args, connection) => {
-      // This requires REST API call since the SDK doesn't expose identity search directly
-      const orgName = connection.serverUrl.split("/")[3];
-      const baseUrl = `https://vssps.dev.azure.com/${orgName}/_apis/identities`;
-      
-      const params = new URLSearchParams({
-        "api-version": "7.2-preview.1",
-        "searchFilter": "General",
-        "filterValue": args.searchFilter,
-      });
+      try {
+        // This requires REST API call since the SDK doesn't expose identity search directly
+        const orgName = connection.serverUrl.split("/")[3];
+        const baseUrl = `https://vssps.dev.azure.com/${orgName}/_apis/identities`;
+        
+        const params = new URLSearchParams({
+          "api-version": "7.2-preview.1",
+          "searchFilter": "General",
+          "filterValue": args.searchFilter,
+        });
 
-      // Note: This would require proper token handling in a real implementation
-      return `Identity search functionality requires direct REST API implementation with proper authentication.\\nSearch filter: "${args.searchFilter}"\\nEndpoint: ${baseUrl}?${params}`;
+        // Note: This would require proper token handling in a real implementation
+        return {
+          content: [{ type: "text", text: `Identity search functionality requires direct REST API implementation with proper authentication.\nSearch filter: "${args.searchFilter}"\nEndpoint: ${baseUrl}?${params}` }],
+          isError: true
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error in identity search: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -141,23 +171,24 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["id"]
     },
     handler: async (args, connection) => {
-      const witApi = await connection.getWorkItemTrackingApi();
-      const workItem = await witApi.getWorkItem(args.id, undefined, undefined, args.expand);
-      
-      if (!workItem) {
-        return `Work item ${args.id} not found.`;
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        const workItem = await witApi.getWorkItem(args.id, undefined, undefined, args.expand);
+        
+        if (!workItem) {
+          return { content: [{ type: "text", text: `Work item ${args.id} not found.` }], isError: true };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching work item: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const fields = workItem.fields || {};
-      return `# Work Item ${workItem.id}: ${fields["System.Title"]}\\n\\n` +
-             `**Type**: ${fields["System.WorkItemType"]}\\n` +
-             `**State**: ${fields["System.State"]}\\n` +
-             `**Assigned To**: ${fields["System.AssignedTo"]?.displayName || "Unassigned"}\\n` +
-             `**Created**: ${fields["System.CreatedDate"]}\\n` +
-             `**Area Path**: ${fields["System.AreaPath"]}\\n` +
-             `**Iteration Path**: ${fields["System.IterationPath"]}\\n` +
-             `**Tags**: ${fields["System.Tags"] || "None"}\\n\\n` +
-             `**Description**: ${fields["System.Description"] || "No description"}`;
     }
   },
 
@@ -179,36 +210,41 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "type", "title"]
     },
     handler: async (args, connection) => {
-      const witApi = await connection.getWorkItemTrackingApi();
-      
-      const patchDocument = [
-        { op: "add", path: "/fields/System.Title", value: args.title }
-      ];
-      
-      if (args.description) {
-        patchDocument.push({ op: "add", path: "/fields/System.Description", value: args.description });
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        
+        const patchDocument = [
+          { op: "add", path: "/fields/System.Title", value: args.title }
+        ];
+        
+        if (args.description) {
+          patchDocument.push({ op: "add", path: "/fields/System.Description", value: args.description });
+        }
+        if (args.assignedTo) {
+          patchDocument.push({ op: "add", path: "/fields/System.AssignedTo", value: args.assignedTo });
+        }
+        if (args.tags) {
+          patchDocument.push({ op: "add", path: "/fields/System.Tags", value: args.tags });
+        }
+        if (args.areaPath) {
+          patchDocument.push({ op: "add", path: "/fields/System.AreaPath", value: args.areaPath });
+        }
+        if (args.iterationPath) {
+          patchDocument.push({ op: "add", path: "/fields/System.IterationPath", value: args.iterationPath });
+        }
+        
+        const workItem = await witApi.createWorkItem(null, patchDocument as any, args.project, args.type);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error creating work item: ${errorMessage}` }],
+          isError: true
+        };
       }
-      if (args.assignedTo) {
-        patchDocument.push({ op: "add", path: "/fields/System.AssignedTo", value: args.assignedTo });
-      }
-      if (args.tags) {
-        patchDocument.push({ op: "add", path: "/fields/System.Tags", value: args.tags });
-      }
-      if (args.areaPath) {
-        patchDocument.push({ op: "add", path: "/fields/System.AreaPath", value: args.areaPath });
-      }
-      if (args.iterationPath) {
-        patchDocument.push({ op: "add", path: "/fields/System.IterationPath", value: args.iterationPath });
-      }
-      
-      const workItem = await witApi.createWorkItem(null, patchDocument as any, args.project, args.type);
-      
-      return `# Work Item Created: ${workItem.id}\\n\\n` +
-             `**Title**: ${args.title}\\n` +
-             `**Type**: ${args.type}\\n` +
-             `**Project**: ${args.project}\\n` +
-             `**State**: ${workItem.fields?.["System.State"]}\\n` +
-             `**URL**: ${workItem._links?.html?.href || "N/A"}`;
     }
   },
 
@@ -228,37 +264,46 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["id"]
     },
     handler: async (args, connection) => {
-      const witApi = await connection.getWorkItemTrackingApi();
-      
-      const patchDocument = [];
-      
-      if (args.title) {
-        patchDocument.push({ op: "replace", path: "/fields/System.Title", value: args.title });
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        
+        const patchDocument = [];
+        
+        if (args.title) {
+          patchDocument.push({ op: "replace", path: "/fields/System.Title", value: args.title });
+        }
+        if (args.description) {
+          patchDocument.push({ op: "replace", path: "/fields/System.Description", value: args.description });
+        }
+        if (args.assignedTo) {
+          patchDocument.push({ op: "replace", path: "/fields/System.AssignedTo", value: args.assignedTo });
+        }
+        if (args.state) {
+          patchDocument.push({ op: "replace", path: "/fields/System.State", value: args.state });
+        }
+        if (args.tags) {
+          patchDocument.push({ op: "replace", path: "/fields/System.Tags", value: args.tags });
+        }
+        
+        if (patchDocument.length === 0) {
+          return {
+            content: [{ type: "text", text: `No updates specified for work item ${args.id}` }],
+            isError: true
+          };
+        }
+        
+        const workItem = await witApi.updateWorkItem(null, patchDocument as any, args.id);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error updating work item: ${errorMessage}` }],
+          isError: true
+        };
       }
-      if (args.description) {
-        patchDocument.push({ op: "replace", path: "/fields/System.Description", value: args.description });
-      }
-      if (args.assignedTo) {
-        patchDocument.push({ op: "replace", path: "/fields/System.AssignedTo", value: args.assignedTo });
-      }
-      if (args.state) {
-        patchDocument.push({ op: "replace", path: "/fields/System.State", value: args.state });
-      }
-      if (args.tags) {
-        patchDocument.push({ op: "replace", path: "/fields/System.Tags", value: args.tags });
-      }
-      
-      if (patchDocument.length === 0) {
-        return `No updates specified for work item ${args.id}`;
-      }
-      
-      const workItem = await witApi.updateWorkItem(null, patchDocument as any, args.id);
-      
-      return `# Work Item Updated: ${workItem.id}\\n\\n` +
-             `**Title**: ${workItem.fields?.["System.Title"]}\\n` +
-             `**State**: ${workItem.fields?.["System.State"]}\\n` +
-             `**Assigned To**: ${workItem.fields?.["System.AssignedTo"]?.displayName || "Unassigned"}\\n` +
-             `**URL**: ${workItem._links?.html?.href || "N/A"}`;
     }
   },
 
@@ -274,22 +319,30 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["wiql"]
     },
     handler: async (args, connection) => {
-      const witApi = await connection.getWorkItemTrackingApi();
-      const queryResult = await witApi.queryByWiql({ query: args.wiql });
-      
-      if (!queryResult.workItems || queryResult.workItems.length === 0) {
-        return "No work items found matching the query.";
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        const queryResult = await witApi.queryByWiql({ query: args.wiql });
+        
+        if (!queryResult.workItems || queryResult.workItems.length === 0) {
+          return {
+            content: [{ type: "text", text: "No work items found matching the query." }],
+            isError: true
+          };
+        }
+        
+        const workItemIds = queryResult.workItems.map(wi => wi.id!);
+        const workItems = await witApi.getWorkItems(workItemIds);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error querying work items: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const workItemIds = queryResult.workItems.map(wi => wi.id!);
-      const workItems = await witApi.getWorkItems(workItemIds);
-      
-      const formattedItems = workItems.map(item => {
-        const fields = item.fields || {};
-        return `- **${item.id}**: ${fields["System.Title"]} (${fields["System.State"]}) - ${fields["System.WorkItemType"]}`;
-      }).join('\\n');
-      
-      return `# Query Results (${workItems.length} items)\\n\\n${formattedItems}`;
     }
   },
 
@@ -305,12 +358,21 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["id"]
     },
     handler: async (args, connection) => {
-      const witApi = await connection.getWorkItemTrackingApi();
-      
-      const result = await witApi.deleteWorkItem(args.id, undefined, args.destroy);
-      
-      const action = args.destroy ? "permanently deleted" : "moved to recycle bin";
-      return `Work item ${args.id} has been ${action}.\\nResult: ${JSON.stringify(result, null, 2)}`;
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        
+        const result = await witApi.deleteWorkItem(args.id, undefined, args.destroy);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error deleting work item: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -333,33 +395,42 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const buildDefinitions = await buildApi.getDefinitions(
-        args.project,
-        args.name,
-        args.repositoryId,
-        args.repositoryType,
-        undefined, // queryOrder
-        args.top,
-        undefined, // continuationToken
-        undefined, // minMetricsTime
-        undefined, // definitionIds
-        undefined, // path
-        undefined, // builtAfter
-        undefined, // notBuiltAfter
-        undefined, // includeAllProperties
-        args.includeLatestBuilds
-      );
+      try {
+        const buildApi = await connection.getBuildApi();
+        const buildDefinitions = await buildApi.getDefinitions(
+          args.project,
+          args.name,
+          args.repositoryId,
+          args.repositoryType,
+          undefined, // queryOrder
+          args.top,
+          undefined, // continuationToken
+          undefined, // minMetricsTime
+          undefined, // definitionIds
+          undefined, // path
+          undefined, // builtAfter
+          undefined, // notBuiltAfter
+          undefined, // includeAllProperties
+          args.includeLatestBuilds
+        );
 
-      if (!buildDefinitions || buildDefinitions.length === 0) {
-        return `No build definitions found for project: ${args.project}`;
+        if (!buildDefinitions || buildDefinitions.length === 0) {
+          return {
+            content: [{ type: "text", text: `No build definitions found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(buildDefinitions, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching build definitions: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const defList = buildDefinitions.map(d => 
-        `- **${d.name}** (ID: ${d.id}): ${(d as any).description || "No description"} - Type: ${d.type} - Repository: ${(d as any).repository?.name}`
-      ).join('\\n');
-
-      return `# Build Definitions for ${args.project} (${buildDefinitions.length})\\n\\n${defList}`;
     }
   },
 
@@ -380,37 +451,46 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const builds = await buildApi.getBuilds(
-        args.project,
-        args.definitions,
-        undefined, // queues
-        args.buildNumber,
-        undefined, // minTime
-        undefined, // maxTime
-        undefined, // requestedFor
-        undefined, // reasonFilter
-        args.statusFilter,
-        args.resultFilter,
-        undefined, // tagFilters
-        undefined, // properties
-        args.top || 10,
-        undefined, // continuationToken
-        undefined, // maxBuildsPerDefinition
-        undefined, // deletedFilter
-        undefined, // queryOrder
-        args.branchName
-      );
+      try {
+        const buildApi = await connection.getBuildApi();
+        const builds = await buildApi.getBuilds(
+          args.project,
+          args.definitions,
+          undefined, // queues
+          args.buildNumber,
+          undefined, // minTime
+          undefined, // maxTime
+          undefined, // requestedFor
+          undefined, // reasonFilter
+          args.statusFilter,
+          args.resultFilter,
+          undefined, // tagFilters
+          undefined, // properties
+          args.top || 10,
+          undefined, // continuationToken
+          undefined, // maxBuildsPerDefinition
+          undefined, // deletedFilter
+          undefined, // queryOrder
+          args.branchName
+        );
 
-      if (!builds || builds.length === 0) {
-        return `No builds found for project: ${args.project}`;
+        if (!builds || builds.length === 0) {
+          return {
+            content: [{ type: "text", text: `No builds found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(builds, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching builds: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const buildList = builds.map(b => 
-        `- **Build ${b.buildNumber}**: ${b.definition?.name} - ${b.status} (${b.result || "In Progress"}) - Branch: ${b.sourceBranch}`
-      ).join('\\n');
-
-      return `# Recent builds for ${args.project} (${builds.length})\\n\\n${buildList}`;
     }
   },
 
@@ -428,29 +508,34 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "definitionId"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const pipelinesApi = await connection.getPipelinesApi();
-      
-      const definition = await buildApi.getDefinition(args.project, args.definitionId);
-      const runRequest = {
-        resources: {
-          repositories: {
-            self: {
-              refName: args.sourceBranch || definition.repository?.defaultBranch || "refs/heads/main",
+      try {
+        const buildApi = await connection.getBuildApi();
+        const pipelinesApi = await connection.getPipelinesApi();
+        
+        const definition = await buildApi.getDefinition(args.project, args.definitionId);
+        const runRequest = {
+          resources: {
+            repositories: {
+              self: {
+                refName: args.sourceBranch || definition.repository?.defaultBranch || "refs/heads/main",
+              },
             },
           },
-        },
-        templateParameters: args.parameters,
-      };
+          templateParameters: args.parameters,
+        };
 
-      const pipelineRun = await pipelinesApi.runPipeline(runRequest, args.project, args.definitionId);
-      
-      return `# Build Triggered Successfully\\n\\n` +
-             `**Pipeline Run ID**: ${pipelineRun.id}\\n` +
-             `**Definition**: ${definition.name}\\n` +
-             `**Branch**: ${args.sourceBranch || definition.repository?.defaultBranch || "refs/heads/main"}\\n` +
-             `**State**: ${pipelineRun.state}\\n` +
-             `**URL**: ${pipelineRun._links?.web?.href || "N/A"}`;
+        const pipelineRun = await pipelinesApi.runPipeline(runRequest, args.project, args.definitionId);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(pipelineRun, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error running build: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -466,23 +551,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "buildId"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const build = await buildApi.getBuild(args.project, args.buildId);
+      try {
+        const buildApi = await connection.getBuildApi();
+        const build = await buildApi.getBuild(args.project, args.buildId);
 
-      if (!build) {
-        return `Build ${args.buildId} not found in project ${args.project}`;
+        if (!build) {
+          return {
+            content: [{ type: "text", text: `Build ${args.buildId} not found in project ${args.project}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(build, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching build status: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      return `# Build Status: ${build.buildNumber}\\n\\n` +
-             `**ID**: ${build.id}\\n` +
-             `**Status**: ${build.status}\\n` +
-             `**Result**: ${build.result || "In Progress"}\\n` +
-             `**Definition**: ${build.definition?.name}\\n` +
-             `**Source Branch**: ${build.sourceBranch}\\n` +
-             `**Started**: ${build.startTime}\\n` +
-             `**Finished**: ${build.finishTime || "Not finished"}\\n` +
-             `**Requested For**: ${build.requestedFor?.displayName}\\n` +
-             `**URL**: ${build._links?.web?.href || "N/A"}`;
     }
   },
 
@@ -498,18 +587,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "buildId"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const logs = await buildApi.getBuildLogs(args.project, args.buildId);
+      try {
+        const buildApi = await connection.getBuildApi();
+        const logs = await buildApi.getBuildLogs(args.project, args.buildId);
 
-      if (!logs || logs.length === 0) {
-        return `No logs found for build ${args.buildId}`;
+        if (!logs || logs.length === 0) {
+          return {
+            content: [{ type: "text", text: `No logs found for build ${args.buildId}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(logs, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching build logs: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const logList = logs.map(log => 
-        `- **Log ${log.id}**: ${log.type} - ${log.lineCount} lines`
-      ).join('\\n');
-
-      return `# Build Logs for Build ${args.buildId}\\n\\n${logList}`;
     }
   },
 
@@ -528,15 +626,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "buildId", "logId"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const logLines = await buildApi.getBuildLogLines(args.project, args.buildId, args.logId, args.startLine, args.endLine);
+      try {
+        const buildApi = await connection.getBuildApi();
+        const logLines = await buildApi.getBuildLogLines(args.project, args.buildId, args.logId, args.startLine, args.endLine);
 
-      if (!logLines || logLines.length === 0) {
-        return `No log content found for build ${args.buildId}, log ${args.logId}`;
+        if (!logLines || logLines.length === 0) {
+          return {
+            content: [{ type: "text", text: `No log content found for build ${args.buildId}, log ${args.logId}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(logLines, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching log content: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const content = logLines.join('\\n');
-      return `# Build Log Content (Build ${args.buildId}, Log ${args.logId})\\n\\n\`\`\`\\n${content}\\n\`\`\``;
     }
   },
 
@@ -553,18 +663,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "buildId"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const changes = await buildApi.getBuildChanges(args.project, args.buildId, undefined, args.top || 100);
+      try {
+        const buildApi = await connection.getBuildApi();
+        const changes = await buildApi.getBuildChanges(args.project, args.buildId, undefined, args.top || 100);
 
-      if (!changes || changes.length === 0) {
-        return `No changes found for build ${args.buildId}`;
+        if (!changes || changes.length === 0) {
+          return {
+            content: [{ type: "text", text: `No changes found for build ${args.buildId}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(changes, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching build changes: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const changesList = changes.map(change => 
-        `- **${change.id}**: ${change.message} - by ${change.author?.displayName} at ${change.timestamp}`
-      ).join('\\n');
-
-      return `# Build Changes (${changes.length} changes)\\n\\n${changesList}`;
     }
   },
 
@@ -580,18 +699,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "definitionId"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const revisions = await buildApi.getDefinitionRevisions(args.project, args.definitionId);
+      try {
+        const buildApi = await connection.getBuildApi();
+        const revisions = await buildApi.getDefinitionRevisions(args.project, args.definitionId);
 
-      if (!revisions || revisions.length === 0) {
-        return `No revisions found for build definition ${args.definitionId}`;
+        if (!revisions || revisions.length === 0) {
+          return {
+            content: [{ type: "text", text: `No revisions found for build definition ${args.definitionId}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(revisions, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching definition revisions: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const revisionsList = revisions.map(rev => 
-        `- **Revision ${rev.revision}**: ${rev.changedDate} - ${rev.comment || "No comment"}`
-      ).join('\\n');
-
-      return `# Build Definition Revisions (${revisions.length} revisions)\\n\\n${revisionsList}`;
     }
   },
 
@@ -610,11 +738,28 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "buildId", "stageName", "status"]
     },
     handler: async (args, connection) => {
-      // This requires direct REST API call
-      const orgUrl = connection.serverUrl;
-      const endpoint = `${orgUrl}/${args.project}/_apis/build/builds/${args.buildId}/stages/${args.stageName}?api-version=7.2-preview.1`;
-      
-      return `Build stage update functionality requires direct REST API implementation.\\nEndpoint: ${endpoint}\\nStage: ${args.stageName}\\nStatus: ${args.status}`;
+      try {
+        // This requires direct REST API call
+        const orgUrl = connection.serverUrl;
+        const endpoint = `${orgUrl}/${args.project}/_apis/build/builds/${args.buildId}/stages/${args.stageName}?api-version=7.2-preview.1`;
+        
+        const result = {
+          message: "Build stage update functionality requires direct REST API implementation.",
+          endpoint: endpoint,
+          stageName: args.stageName,
+          status: args.status
+        };
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error updating build stage: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -631,18 +776,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       }
     },
     handler: async (args, connection) => {
-      const gitApi = await connection.getGitApi();
-      const repositories = await gitApi.getRepositories(args.project);
-      
-      if (!repositories || repositories.length === 0) {
-        return args.project ? `No repositories found for project: ${args.project}` : "No repositories found.";
+      try {
+        const gitApi = await connection.getGitApi();
+        const repositories = await gitApi.getRepositories(args.project);
+        
+        if (!repositories || repositories.length === 0) {
+          return {
+            content: [{ type: "text", text: args.project ? `No repositories found for project: ${args.project}` : "No repositories found." }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(repositories, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing repositories: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const repoList = repositories.map(repo => 
-        `- **${repo.name}**: ${repo.defaultBranch || "No default branch"} (ID: ${repo.id})\\n  Project: ${repo.project?.name} - Size: ${repo.size || "Unknown"} bytes\\n  URL: ${repo.webUrl}`
-      ).join('\\n');
-      
-      return `# Repositories (${repositories.length})\\n\\n${repoList}`;
     }
   },
 
@@ -658,21 +812,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["repositoryId"]
     },
     handler: async (args, connection) => {
-      const gitApi = await connection.getGitApi();
-      const repository = await gitApi.getRepository(args.repositoryId, args.project);
-      
-      if (!repository) {
-        return `Repository ${args.repositoryId} not found.`;
+      try {
+        const gitApi = await connection.getGitApi();
+        const repository = await gitApi.getRepository(args.repositoryId, args.project);
+        
+        if (!repository) {
+          return {
+            content: [{ type: "text", text: `Repository ${args.repositoryId} not found.` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(repository, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting repository: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      return `# Repository: ${repository.name}\\n\\n` +
-             `**ID**: ${repository.id}\\n` +
-             `**Default Branch**: ${repository.defaultBranch || "Not set"}\\n` +
-             `**Size**: ${repository.size || "Unknown"} bytes\\n` +
-             `**URL**: ${repository.webUrl || repository.remoteUrl || "N/A"}\\n` +
-             `**Project**: ${repository.project?.name || "Unknown"}\\n` +
-             `**Is Fork**: ${repository.isFork ? "Yes" : "No"}\\n` +
-             `**Is Disabled**: ${repository.isDisabled ? "Yes" : "No"}`;
     }
   },
 
@@ -688,18 +848,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["repositoryId"]
     },
     handler: async (args, connection) => {
-      const gitApi = await connection.getGitApi();
-      const branches = await gitApi.getBranches(args.repositoryId, args.project);
-      
-      if (!branches || branches.length === 0) {
-        return `No branches found for repository: ${args.repositoryId}`;
+      try {
+        const gitApi = await connection.getGitApi();
+        const branches = await gitApi.getBranches(args.repositoryId, args.project);
+        
+        if (!branches || branches.length === 0) {
+          return {
+            content: [{ type: "text", text: `No branches found for repository: ${args.repositoryId}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(branches, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting branches: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const branchList = branches.map(branch => 
-        `- **${branch.name}**: ${(branch as any).objectId} - ${(branch as any).isBaseVersion ? "(Default)" : ""}`
-      ).join('\\n');
-      
-      return `# Branches for ${args.repositoryId} (${branches.length})\\n\\n${branchList}`;
     }
   },
 
@@ -717,23 +886,32 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["repositoryId"]
     },
     handler: async (args, connection) => {
-      const gitApi = await connection.getGitApi();
-      const searchCriteria = {
-        itemVersion: args.branch ? { version: args.branch } : undefined,
-        $top: args.top || 10
-      };
-      
-      const commits = await gitApi.getCommits(args.repositoryId, searchCriteria, args.project);
-      
-      if (!commits || commits.length === 0) {
-        return `No commits found for repository: ${args.repositoryId}`;
+      try {
+        const gitApi = await connection.getGitApi();
+        const searchCriteria = {
+          itemVersion: args.branch ? { version: args.branch } : undefined,
+          $top: args.top || 10
+        };
+        
+        const commits = await gitApi.getCommits(args.repositoryId, searchCriteria, args.project);
+        
+        if (!commits || commits.length === 0) {
+          return {
+            content: [{ type: "text", text: `No commits found for repository: ${args.repositoryId}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(commits, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting commits: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const commitList = commits.map(commit => 
-        `- **${commit.commitId?.substring(0, 8)}**: ${commit.comment} - by ${commit.author?.name} at ${commit.author?.date}`
-      ).join('\\n');
-      
-      return `# Recent Commits for ${args.repositoryId} (${commits.length})\\n\\n${commitList}`;
     }
   },
 
@@ -751,23 +929,32 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["repositoryId"]
     },
     handler: async (args, connection) => {
-      const gitApi = await connection.getGitApi();
-      const searchCriteria = {
-        status: args.status === "active" ? 1 : args.status === "completed" ? 3 : args.status === "abandoned" ? 2 : undefined,
-        $top: args.top || 10
-      };
-      
-      const pullRequests = await gitApi.getPullRequests(args.repositoryId, searchCriteria, args.project);
-      
-      if (!pullRequests || pullRequests.length === 0) {
-        return `No pull requests found for repository: ${args.repositoryId}`;
+      try {
+        const gitApi = await connection.getGitApi();
+        const searchCriteria = {
+          status: args.status === "active" ? 1 : args.status === "completed" ? 3 : args.status === "abandoned" ? 2 : undefined,
+          $top: args.top || 10
+        };
+        
+        const pullRequests = await gitApi.getPullRequests(args.repositoryId, searchCriteria, args.project);
+        
+        if (!pullRequests || pullRequests.length === 0) {
+          return {
+            content: [{ type: "text", text: `No pull requests found for repository: ${args.repositoryId}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(pullRequests, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting pull requests: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const prList = pullRequests.map(pr => 
-        `- **PR #${pr.pullRequestId}**: ${pr.title} - ${pr.status} - by ${pr.createdBy?.displayName}\\n  Source: ${pr.sourceRefName} → Target: ${pr.targetRefName}`
-      ).join('\\n');
-      
-      return `# Pull Requests for ${args.repositoryId} (${pullRequests.length})\\n\\n${prList}`;
     }
   },
 
@@ -785,25 +972,34 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["repositoryId"]
     },
     handler: async (args, connection) => {
-      const gitApi = await connection.getGitApi();
-      const recursionLevel = args.recursionLevel === "none" ? 0 : args.recursionLevel === "oneLevel" ? 1 : 120;
-      
-      const items = await gitApi.getItems(
-        args.repositoryId, 
-        args.project, 
-        args.scopePath, 
-        recursionLevel
-      );
-      
-      if (!items || items.length === 0) {
-        return `No items found in repository: ${args.repositoryId}`;
+      try {
+        const gitApi = await connection.getGitApi();
+        const recursionLevel = args.recursionLevel === "none" ? 0 : args.recursionLevel === "oneLevel" ? 1 : 120;
+        
+        const items = await gitApi.getItems(
+          args.repositoryId, 
+          args.project, 
+          args.scopePath, 
+          recursionLevel
+        );
+        
+        if (!items || items.length === 0) {
+          return {
+            content: [{ type: "text", text: `No items found in repository: ${args.repositoryId}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(items, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting repository items: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const itemList = items.map(item => 
-        `- ${item.isFolder ? "📁" : "📄"} **${item.path}**: ${(item as any).size || 0} bytes - ${item.gitObjectType}`
-      ).join('\\n');
-      
-      return `# Repository Items for ${args.repositoryId} (${items.length})\\n\\n${itemList}`;
     }
   },
 
@@ -820,18 +1016,24 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       }
     },
     handler: async (args, connection) => {
-      const wikiApi = await connection.getWikiApi();
-      const wikis = await wikiApi.getAllWikis(args.project);
+      try {
+        const wikiApi = await connection.getWikiApi();
+        const wikis = await wikiApi.getAllWikis(args.project);
 
-      if (!wikis || wikis.length === 0) {
-        return "No wikis found";
+        if (!wikis || wikis.length === 0) {
+          return { content: [{ type: "text", text: "No wikis found" }], isError: true };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(wikis, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching wikis: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const wikiList = wikis.map(wiki => 
-        `- **${wiki.name}**: ${wiki.type} - Project: ${wiki.projectId}\\n  ID: ${wiki.id} - URL: ${wiki.url}`
-      ).join('\\n');
-
-      return `# Wikis (${wikis.length})\\n\\n${wikiList}`;
     }
   },
 
@@ -847,62 +1049,70 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["wikiIdentifier"]
     },
     handler: async (args, connection) => {
-      const wikiApi = await connection.getWikiApi();
-      const wiki = await wikiApi.getWiki(args.wikiIdentifier, args.project);
+      try {
+        const wikiApi = await connection.getWikiApi();
+        const wiki = await wikiApi.getWiki(args.wikiIdentifier, args.project);
 
-      if (!wiki) {
-        return "No wiki found";
+        if (!wiki) {
+          return {
+            content: [{ type: "text", text: "No wiki found" }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(wiki, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting wiki: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      return `# Wiki: ${wiki.name}\\n\\n` +
-             `**ID**: ${wiki.id}\\n` +
-             `**Type**: ${wiki.type}\\n` +
-             `**Project**: ${wiki.projectId}\\n` +
-             `**Repository**: ${wiki.repositoryId}\\n` +
-             `**Mapped Path**: ${wiki.mappedPath}\\n` +
-             `**URL**: ${wiki.url}`;
     }
   },
 
   {
     name: "wiki_list_pages",
-    description: "Retrieve a list of wiki pages for a specific wiki and project",
+    description: "Retrieve a list of wiki pages for a specific wiki and project.",
     inputSchema: {
       type: "object",
       properties: {
         wikiIdentifier: { type: "string", description: "The unique identifier of the wiki." },
         project: { type: "string", description: "The project name or ID where the wiki is located." },
-        top: { type: "number", description: "The maximum number of pages to return. Defaults to 20." },
-        continuationToken: { type: "string", description: "Token for pagination to retrieve the next set of pages." }
+        top: { type: "number", default: 20, description: "The maximum number of pages to return. Defaults to 20." },
+        continuationToken: { type: "string", description: "Token for pagination to retrieve the next set of pages." },
+        pageViewsForDays: { type: "number", description: "Number of days to retrieve page views for. If not specified, page views are not included." }
       },
       required: ["wikiIdentifier", "project"]
     },
     handler: async (args, connection) => {
-      const wikiApi = await connection.getWikiApi();
+      try {
+        const wikiApi = await connection.getWikiApi();
 
-      const pagesBatchRequest = {
-        top: args.top || 20,
-        continuationToken: args.continuationToken
-      };
+        const pagesBatchRequest = {
+          top: args.top || 20,
+          continuationToken: args.continuationToken,
+          pageViewsForDays: args.pageViewsForDays
+        };
 
-      const pages = await wikiApi.getPagesBatch(pagesBatchRequest, args.project, args.wikiIdentifier);
+        const pages = await wikiApi.getPagesBatch(pagesBatchRequest, args.project, args.wikiIdentifier);
 
-      if (!pages) {
-        return "No wiki pages found";
+        if (!pages) {
+          return { content: [{ type: "text", text: "No wiki pages found" }], isError: true };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(pages, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching wiki pages: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      // Convert pages iterator to array
-      const pageArray = Array.from(pages);
-      
-      if (pageArray.length === 0) {
-        return "No wiki pages found";
-      }
-
-      const pageList = pageArray.map(page => 
-        `- **${page.path}**: ${(page as any).gitItemType || 'Page'} - ID: ${page.id}`
-      ).join('\\n');
-
-      return `# Wiki Pages (${pageArray.length})\\n\\n${pageList}`;
     }
   },
 
@@ -919,17 +1129,30 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["wikiIdentifier", "project", "path"]
     },
     handler: async (args, connection) => {
-      const wikiApi = await connection.getWikiApi();
+      try {
+        const wikiApi = await connection.getWikiApi();
 
-      const stream = await wikiApi.getPageText(args.project, args.wikiIdentifier, args.path, undefined, undefined, true);
+        const stream = await wikiApi.getPageText(args.project, args.wikiIdentifier, args.path, undefined, undefined, true);
 
-      if (!stream) {
-        return "No wiki page content found";
+        if (!stream) {
+          return {
+            content: [{ type: "text", text: "No wiki page content found" }],
+            isError: true
+          };
+        }
+
+        const content = await streamToString(stream);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify({ path: args.path, content }, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting wiki page content: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const content = await streamToString(stream);
-
-      return `# Wiki Page Content: ${args.path}\\n\\n\`\`\`markdown\\n${content}\\n\`\`\``;
     }
   },
 
@@ -948,18 +1171,32 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["wikiIdentifier", "path", "content"]
     },
     handler: async (args, connection) => {
-      // This requires direct REST API call with proper authentication
-      const normalizedPath = args.path.startsWith("/") ? args.path : `/${args.path}`;
-      const encodedPath = encodeURIComponent(normalizedPath);
-      
-      const baseUrl = connection.serverUrl;
-      const projectParam = args.project || "";
-      const url = `${baseUrl}/${projectParam}/_apis/wiki/wikis/${args.wikiIdentifier}/pages?path=${encodedPath}&api-version=7.1`;
+      try {
+        // This requires direct REST API call with proper authentication
+        const normalizedPath = args.path.startsWith("/") ? args.path : `/${args.path}`;
+        const encodedPath = encodeURIComponent(normalizedPath);
+        
+        const baseUrl = connection.serverUrl;
+        const projectParam = args.project || "";
+        const url = `${baseUrl}/${projectParam}/_apis/wiki/wikis/${args.wikiIdentifier}/pages?path=${encodedPath}&api-version=7.1`;
 
-      return `Wiki page create/update functionality requires direct REST API implementation with proper authentication.\\n` +
-             `Endpoint: ${url}\\n` +
-             `Path: ${normalizedPath}\\n` +
-             `Content Length: ${args.content.length} characters`;
+        const result = {
+          message: "Wiki page create/update functionality requires direct REST API implementation with proper authentication.",
+          endpoint: url,
+          path: normalizedPath,
+          contentLength: args.content.length
+        };
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error creating/updating wiki page: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -982,28 +1219,43 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["searchText"]
     },
     handler: async (args, connection) => {
-      // This requires direct REST API call to the search service
-      const orgName = connection.serverUrl.split("/")[3];
-      const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/codesearchresults?api-version=7.2-preview.1`;
+      try {
+        // This requires direct REST API call to the search service
+        const orgName = connection.serverUrl.split("/")[3];
+        const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/codesearchresults?api-version=7.2-preview.1`;
 
-      const filters: Record<string, string[]> = {};
-      if (args.project && args.project.length > 0) filters.Project = args.project;
-      if (args.repository && args.repository.length > 0) filters.Repository = args.repository;
-      if (args.path && args.path.length > 0) filters.Path = args.path;
-      if (args.branch && args.branch.length > 0) filters.Branch = args.branch;
+        const filters: Record<string, string[]> = {};
+        if (args.project && args.project.length > 0) filters.Project = args.project;
+        if (args.repository && args.repository.length > 0) filters.Repository = args.repository;
+        if (args.path && args.path.length > 0) filters.Path = args.path;
+        if (args.branch && args.branch.length > 0) filters.Branch = args.branch;
 
-      const requestBody = {
-        searchText: args.searchText,
-        includeFacets: false,
-        $skip: 0,
-        $top: args.top || 5,
-        filters: Object.keys(filters).length > 0 ? filters : undefined
-      };
+        const requestBody = {
+          searchText: args.searchText,
+          includeFacets: false,
+          $skip: 0,
+          $top: args.top || 5,
+          filters: Object.keys(filters).length > 0 ? filters : undefined
+        };
 
-      return `Code search functionality requires direct REST API implementation with proper authentication.\\n` +
-             `Search: "${args.searchText}"\\n` +
-             `Endpoint: ${url}\\n` +
-             `Filters: ${JSON.stringify(filters, null, 2)}`;
+        const result = {
+          message: "Code search functionality requires direct REST API implementation with proper authentication.",
+          searchText: args.searchText,
+          endpoint: url,
+          filters,
+          requestBody
+        };
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error searching code: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1021,18 +1273,32 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["searchText"]
     },
     handler: async (args, connection) => {
-      // This requires direct REST API call to the search service
-      const orgName = connection.serverUrl.split("/")[3];
-      const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/wikisearchresults?api-version=7.2-preview.1`;
+      try {
+        // This requires direct REST API call to the search service
+        const orgName = connection.serverUrl.split("/")[3];
+        const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/wikisearchresults?api-version=7.2-preview.1`;
 
-      const filters: Record<string, string[]> = {};
-      if (args.project && args.project.length > 0) filters.Project = args.project;
-      if (args.wiki && args.wiki.length > 0) filters.Wiki = args.wiki;
+        const filters: Record<string, string[]> = {};
+        if (args.project && args.project.length > 0) filters.Project = args.project;
+        if (args.wiki && args.wiki.length > 0) filters.Wiki = args.wiki;
 
-      return `Wiki search functionality requires direct REST API implementation with proper authentication.\\n` +
-             `Search: "${args.searchText}"\\n` +
-             `Endpoint: ${url}\\n` +
-             `Filters: ${JSON.stringify(filters, null, 2)}`;
+        const result = {
+          message: "Wiki search functionality requires direct REST API implementation with proper authentication.",
+          searchText: args.searchText,
+          endpoint: url,
+          filters
+        };
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error searching wiki: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1053,21 +1319,35 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["searchText"]
     },
     handler: async (args, connection) => {
-      // This requires direct REST API call to the search service
-      const orgName = connection.serverUrl.split("/")[3];
-      const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/workitemsearchresults?api-version=7.2-preview.1`;
+      try {
+        // This requires direct REST API call to the search service
+        const orgName = connection.serverUrl.split("/")[3];
+        const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/workitemsearchresults?api-version=7.2-preview.1`;
 
-      const filters: Record<string, string[]> = {};
-      if (args.project && args.project.length > 0) filters["System.TeamProject"] = args.project;
-      if (args.areaPath && args.areaPath.length > 0) filters["System.AreaPath"] = args.areaPath;
-      if (args.workItemType && args.workItemType.length > 0) filters["System.WorkItemType"] = args.workItemType;
-      if (args.state && args.state.length > 0) filters["System.State"] = args.state;
-      if (args.assignedTo && args.assignedTo.length > 0) filters["System.AssignedTo"] = args.assignedTo;
+        const filters: Record<string, string[]> = {};
+        if (args.project && args.project.length > 0) filters["System.TeamProject"] = args.project;
+        if (args.areaPath && args.areaPath.length > 0) filters["System.AreaPath"] = args.areaPath;
+        if (args.workItemType && args.workItemType.length > 0) filters["System.WorkItemType"] = args.workItemType;
+        if (args.state && args.state.length > 0) filters["System.State"] = args.state;
+        if (args.assignedTo && args.assignedTo.length > 0) filters["System.AssignedTo"] = args.assignedTo;
 
-      return `Work item search functionality requires direct REST API implementation with proper authentication.\\n` +
-             `Search: "${args.searchText}"\\n` +
-             `Endpoint: ${url}\\n` +
-             `Filters: ${JSON.stringify(filters, null, 2)}`;
+        const result = {
+          message: "Work item search functionality requires direct REST API implementation with proper authentication.",
+          searchText: args.searchText,
+          endpoint: url,
+          filters
+        };
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error searching work items: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1087,21 +1367,30 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "team"]
     },
     handler: async (args, connection) => {
-      const workApi = await connection.getWorkApi();
-      const iterations = await workApi.getTeamIterations(
-        { project: args.project, team: args.team }, 
-        args.timeframe as any
-      );
-      
-      if (!iterations || iterations.length === 0) {
-        return `No iterations found for team ${args.team} in project ${args.project}`;
+      try {
+        const workApi = await connection.getWorkApi();
+        const iterations = await workApi.getTeamIterations(
+          { project: args.project, team: args.team }, 
+          args.timeframe as any
+        );
+        
+        if (!iterations || iterations.length === 0) {
+          return {
+            content: [{ type: "text", text: `No iterations found for team ${args.team} in project ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(iterations, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching team iterations: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const iterationList = iterations.map(iter => 
-        `- **${iter.name}**: ${iter.path}\\n  Start: ${iter.attributes?.startDate} - End: ${iter.attributes?.finishDate}\\n  State: ${iter.attributes?.timeFrame}`
-      ).join('\\n');
-      
-      return `# Iterations for ${args.team} (${iterations.length})\\n\\n${iterationList}`;
     }
   },
 
@@ -1117,18 +1406,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "team"]
     },
     handler: async (args, connection) => {
-      const workApi = await connection.getWorkApi();
-      const teamSettings = await workApi.getTeamSettings({ project: args.project, team: args.team });
-      
-      if (!teamSettings) {
-        return `No settings found for team ${args.team} in project ${args.project}`;
+      try {
+        const workApi = await connection.getWorkApi();
+        const teamSettings = await workApi.getTeamSettings({ project: args.project, team: args.team });
+        
+        if (!teamSettings) {
+          return {
+            content: [{ type: "text", text: `No settings found for team ${args.team} in project ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(teamSettings, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching team settings: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      return `# Team Settings for ${args.team}\\n\\n` +
-             `**Default Iteration**: ${teamSettings.defaultIteration?.name}\\n` +
-             `**Backlog Iteration**: ${teamSettings.backlogIteration?.name}\\n` +
-             `**Working Days**: ${teamSettings.workingDays?.join(', ')}\\n` +
-             `**Bug Behavior**: ${teamSettings.bugsBehavior}`;
     }
   },
 
@@ -1144,17 +1442,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "team"]
     },
     handler: async (args, connection) => {
-      const workApi = await connection.getWorkApi();
-      const teamFieldValues = await workApi.getTeamFieldValues({ project: args.project, team: args.team });
-      
-      if (!teamFieldValues) {
-        return `No field values found for team ${args.team} in project ${args.project}`;
+      try {
+        const workApi = await connection.getWorkApi();
+        const teamFieldValues = await workApi.getTeamFieldValues({ project: args.project, team: args.team });
+        
+        if (!teamFieldValues) {
+          return {
+            content: [{ type: "text", text: `No field values found for team ${args.team} in project ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(teamFieldValues, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching team field values: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      return `# Team Field Values for ${args.team}\\n\\n` +
-             `**Field**: ${(teamFieldValues.field as any)?.name}\\n` +
-             `**Default Value**: ${teamFieldValues.defaultValue}\\n` +
-             `**Values**: ${teamFieldValues.values?.map(v => v.value).join(', ')}`;
     }
   },
 
@@ -1173,21 +1481,30 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const releaseApi = await connection.getReleaseApi();
-      const definitions = await releaseApi.getReleaseDefinitions(
-        args.project, 
-        args.searchText
-      );
-      
-      if (!definitions || definitions.length === 0) {
-        return `No release definitions found for project: ${args.project}`;
+      try {
+        const releaseApi = await connection.getReleaseApi();
+        const definitions = await releaseApi.getReleaseDefinitions(
+          args.project, 
+          args.searchText
+        );
+        
+        if (!definitions || definitions.length === 0) {
+          return {
+            content: [{ type: "text", text: `No release definitions found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(definitions, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching release definitions: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const defList = definitions.map(d => 
-        `- **${d.name}** (ID: ${d.id}): ${d.description || "No description"}\\n  Created: ${d.createdOn} - Modified: ${d.modifiedOn}`
-      ).join('\\n');
-      
-      return `# Release Definitions for ${args.project} (${definitions.length})\\n\\n${defList}`;
     }
   },
 
@@ -1204,30 +1521,39 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const releaseApi = await connection.getReleaseApi();
-      const releases = await releaseApi.getReleases(
-        args.project,
-        args.definitionId,
-        undefined, // definitionEnvironmentId
-        undefined, // searchText
-        undefined, // createdBy
-        undefined, // statusFilter
-        undefined, // environmentStatusFilter
-        undefined, // minCreatedTime
-        undefined, // maxCreatedTime
-        undefined, // queryOrder
-        args.top || 10
-      );
-      
-      if (!releases || releases.length === 0) {
-        return `No releases found for project: ${args.project}`;
+      try {
+        const releaseApi = await connection.getReleaseApi();
+        const releases = await releaseApi.getReleases(
+          args.project,
+          args.definitionId,
+          undefined, // definitionEnvironmentId
+          undefined, // searchText
+          undefined, // createdBy
+          undefined, // statusFilter
+          undefined, // environmentStatusFilter
+          undefined, // minCreatedTime
+          undefined, // maxCreatedTime
+          undefined, // queryOrder
+          args.top || 10
+        );
+        
+        if (!releases || releases.length === 0) {
+          return {
+            content: [{ type: "text", text: `No releases found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(releases, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching releases: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const releaseList = releases.map(r => 
-        `- **${r.name}**: ${r.status} - Created: ${r.createdOn}\\n  Definition: ${r.releaseDefinition?.name} - Created by: ${r.createdBy?.displayName}`
-      ).join('\\n');
-      
-      return `# Recent Releases for ${args.project} (${releases.length})\\n\\n${releaseList}`;
     }
   },
 
@@ -1244,22 +1570,26 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "definitionId"]
     },
     handler: async (args, connection) => {
-      const releaseApi = await connection.getReleaseApi();
-      
-      const releaseStartMetadata = {
-        definitionId: args.definitionId,
-        description: args.description || `Release created on ${new Date().toISOString()}`
-      };
-      
-      const release = await releaseApi.createRelease(releaseStartMetadata, args.project);
-      
-      return `# Release Created: ${release.name}\\n\\n` +
-             `**ID**: ${release.id}\\n` +
-             `**Status**: ${release.status}\\n` +
-             `**Definition**: ${release.releaseDefinition?.name}\\n` +
-             `**Created**: ${release.createdOn}\\n` +
-             `**Created by**: ${release.createdBy?.displayName}\\n` +
-             `**Description**: ${release.description}`;
+      try {
+        const releaseApi = await connection.getReleaseApi();
+        
+        const releaseStartMetadata = {
+          definitionId: args.definitionId,
+          description: args.description || `Release created on ${new Date().toISOString()}`
+        };
+        
+        const release = await releaseApi.createRelease(releaseStartMetadata, args.project);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(release, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error creating release: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1275,25 +1605,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "releaseId"]
     },
     handler: async (args, connection) => {
-      const releaseApi = await connection.getReleaseApi();
-      const release = await releaseApi.getRelease(args.project, args.releaseId);
-      
-      if (!release) {
-        return `Release ${args.releaseId} not found in project ${args.project}`;
+      try {
+        const releaseApi = await connection.getReleaseApi();
+        const release = await releaseApi.getRelease(args.project, args.releaseId);
+        
+        if (!release) {
+          return {
+            content: [{ type: "text", text: `Release ${args.releaseId} not found in project ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(release, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching release: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const environments = release.environments?.map(env => 
-        `  - **${env.name}**: ${env.status} (${env.deploySteps?.length || 0} steps)`
-      ).join('\\n') || "No environments";
-      
-      return `# Release: ${release.name}\\n\\n` +
-             `**ID**: ${release.id}\\n` +
-             `**Status**: ${release.status}\\n` +
-             `**Definition**: ${release.releaseDefinition?.name}\\n` +
-             `**Created**: ${release.createdOn}\\n` +
-             `**Created by**: ${release.createdBy?.displayName}\\n` +
-             `**Description**: ${release.description}\\n\\n` +
-             `**Environments**:\\n${environments}`;
     }
   },
 
@@ -1314,26 +1646,35 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const testPlanApi = await connection.getTestPlanApi();
-      const owner = ""; // Making owner empty until we figure out how to get owner ID
-      
-      const testPlans = await testPlanApi.getTestPlans(
-        args.project, 
-        owner, 
-        args.continuationToken, 
-        args.includePlanDetails || false, 
-        args.filterActivePlans !== false
-      );
+      try {
+        const testPlanApi = await connection.getTestPlanApi();
+        const owner = ""; // Making owner empty until we figure out how to get owner ID
+        
+        const testPlans = await testPlanApi.getTestPlans(
+          args.project, 
+          owner, 
+          args.continuationToken, 
+          args.includePlanDetails || false, 
+          args.filterActivePlans !== false
+        );
 
-      if (!testPlans || testPlans.length === 0) {
-        return `No test plans found for project: ${args.project}`;
+        if (!testPlans || testPlans.length === 0) {
+          return {
+            content: [{ type: "text", text: `No test plans found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(testPlans, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching test plans: ${errorMessage}` }],
+          isError: true
+        };
       }
-
-      const planList = testPlans.map(plan => 
-        `- **${plan.name}** (ID: ${plan.id}): ${plan.description || "No description"}\\n  State: ${plan.state} - Area: ${plan.areaPath}`
-      ).join('\\n');
-
-      return `# Test Plans for ${args.project} (${testPlans.length})\\n\\n${planList}`;
     }
   },
 
@@ -1352,23 +1693,28 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "name"]
     },
     handler: async (args, connection) => {
-      const testPlanApi = await connection.getTestPlanApi();
-      
-      const testPlanCreateParams = {
-        name: args.name,
-        description: args.description,
-        areaPath: args.areaPath,
-        iteration: args.iterationPath
-      };
-      
-      const testPlan = await testPlanApi.createTestPlan(testPlanCreateParams, args.project);
-      
-      return `# Test Plan Created: ${testPlan.name}\\n\\n` +
-             `**ID**: ${testPlan.id}\\n` +
-             `**State**: ${testPlan.state}\\n` +
-             `**Area Path**: ${testPlan.areaPath}\\n` +
-             `**Iteration**: ${testPlan.iteration}\\n` +
-             `**Description**: ${testPlan.description}`;
+      try {
+        const testPlanApi = await connection.getTestPlanApi();
+        
+        const testPlanCreateParams = {
+          name: args.name,
+          description: args.description,
+          areaPath: args.areaPath,
+          iteration: args.iterationPath
+        };
+        
+        const testPlan = await testPlanApi.createTestPlan(testPlanCreateParams, args.project);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(testPlan, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error creating test plan: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1386,27 +1732,33 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "title"]
     },
     handler: async (args, connection) => {
-      // Test case creation requires work item tracking API since test cases are work items
-      const witApi = await connection.getWorkItemTrackingApi();
-      
-      const patchDocument = [
-        { op: "add", path: "/fields/System.Title", value: args.title }
-      ];
-      
-      if (args.steps) {
-        patchDocument.push({ op: "add", path: "/fields/Microsoft.VSTS.TCM.Steps", value: args.steps });
+      try {
+        // Test case creation requires work item tracking API since test cases are work items
+        const witApi = await connection.getWorkItemTrackingApi();
+        
+        const patchDocument = [
+          { op: "add", path: "/fields/System.Title", value: args.title }
+        ];
+        
+        if (args.steps) {
+          patchDocument.push({ op: "add", path: "/fields/Microsoft.VSTS.TCM.Steps", value: args.steps });
+        }
+        if (args.areaPath) {
+          patchDocument.push({ op: "add", path: "/fields/System.AreaPath", value: args.areaPath });
+        }
+        
+        const testCase = await witApi.createWorkItem(null, patchDocument as any, args.project, "Test Case");
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(testCase, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error creating test case: ${errorMessage}` }],
+          isError: true
+        };
       }
-      if (args.areaPath) {
-        patchDocument.push({ op: "add", path: "/fields/System.AreaPath", value: args.areaPath });
-      }
-      
-      const testCase = await witApi.createWorkItem(null, patchDocument as any, args.project, "Test Case");
-      
-      return `# Test Case Created: ${testCase.id}\\n\\n` +
-             `**Title**: ${args.title}\\n` +
-             `**State**: ${testCase.fields?.["System.State"]}\\n` +
-             `**Area Path**: ${testCase.fields?.["System.AreaPath"]}\\n` +
-             `**URL**: ${testCase._links?.html?.href || "N/A"}`;
     }
   },
 
@@ -1422,25 +1774,33 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      // Use WIQL query to find test cases
-      const witApi = await connection.getWorkItemTrackingApi();
-      const wiql = `SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.WorkItemType] = 'Test Case' AND [System.TeamProject] = '${args.project}' ORDER BY [System.Id] DESC`;
-      
-      const queryResult = await witApi.queryByWiql({ query: wiql });
-      
-      if (!queryResult.workItems || queryResult.workItems.length === 0) {
-        return `No test cases found for project: ${args.project}`;
+      try {
+        // Use WIQL query to find test cases
+        const witApi = await connection.getWorkItemTrackingApi();
+        const wiql = `SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.WorkItemType] = 'Test Case' AND [System.TeamProject] = '${args.project}' ORDER BY [System.Id] DESC`;
+        
+        const queryResult = await witApi.queryByWiql({ query: wiql });
+        
+        if (!queryResult.workItems || queryResult.workItems.length === 0) {
+          return {
+            content: [{ type: "text", text: `No test cases found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        const limitedIds = queryResult.workItems.slice(0, args.top || 10).map(wi => wi.id!);
+        const workItems = await witApi.getWorkItems(limitedIds);
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing test cases: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const limitedIds = queryResult.workItems.slice(0, args.top || 10).map(wi => wi.id!);
-      const workItems = await witApi.getWorkItems(limitedIds);
-      
-      const testCaseList = workItems.map(item => {
-        const fields = item.fields || {};
-        return `- **${item.id}**: ${fields["System.Title"]} (${fields["System.State"]})`;
-      }).join('\\n');
-      
-      return `# Test Cases for ${args.project} (${workItems.length})\\n\\n${testCaseList}`;
     }
   },
 
@@ -1458,11 +1818,25 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "planId", "suiteId", "testCaseIds"]
     },
     handler: async (args, connection) => {
-      // This requires direct API calls to test plan services
-      return `Adding test cases to suite functionality requires direct REST API implementation.\\n` +
-             `Plan ID: ${args.planId}\\n` +
-             `Suite ID: ${args.suiteId}\\n` +
-             `Test Case IDs: ${args.testCaseIds.join(', ')}`;
+      try {
+        // This requires direct API calls to test plan services
+        const result = {
+          message: "Adding test cases to suite functionality requires direct REST API implementation.",
+          planId: args.planId,
+          suiteId: args.suiteId,
+          testCaseIds: args.testCaseIds
+        };
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error adding test cases to suite: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1478,18 +1852,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "buildId"]
     },
     handler: async (args, connection) => {
-      const testApi = await connection.getTestApi();
-      const testResults = await testApi.getTestResults(args.project, undefined, undefined, undefined, args.buildId);
-      
-      if (!testResults || testResults.length === 0) {
-        return `No test results found for build ${args.buildId}`;
+      try {
+        const testApi = await connection.getTestApi();
+        const testResults = await testApi.getTestResults(args.project, undefined, undefined, undefined, args.buildId);
+        
+        if (!testResults || testResults.length === 0) {
+          return {
+            content: [{ type: "text", text: `No test results found for build ${args.buildId}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(testResults, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching test results: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const resultList = testResults.map(result => 
-        `- **${result.testCase?.name || result.automatedTestName}**: ${result.outcome}\\n  Duration: ${result.durationInMs}ms - Run: ${result.testRun?.name}`
-      ).join('\\n');
-      
-      return `# Test Results for Build ${args.buildId} (${testResults.length})\\n\\n${resultList}`;
     }
   },
 
@@ -1513,23 +1896,39 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "repository"]
     },
     handler: async (args, connection) => {
-      // This requires direct REST API call to Advanced Security APIs
-      const orgName = connection.serverUrl.split("/")[3];
-      const endpoint = `https://advsec.dev.azure.com/${orgName}/${args.project}/_apis/alert/repositories/${args.repository}/alerts`;
-      
-      const filters = [];
-      if (args.alertType) filters.push(`alertType=${args.alertType}`);
-      if (args.states) filters.push(`states=${args.states.join(',')}`);
-      if (args.severities) filters.push(`severities=${args.severities.join(',')}`);
-      if (args.top) filters.push(`$top=${args.top}`);
-      if (args.onlyDefaultBranch !== false) filters.push('onlyDefaultBranch=true');
-      
-      const url = filters.length > 0 ? `${endpoint}?${filters.join('&')}` : endpoint;
-      
-      return `Advanced Security alerts functionality requires direct REST API implementation with proper authentication.\\n` +
-             `Repository: ${args.repository}\\n` +
-             `Endpoint: ${url}\\n` +
-             `Filters: Alert Type: ${args.alertType || 'all'}, States: ${args.states?.join(', ') || 'all'}, Severities: ${args.severities?.join(', ') || 'all'}`;
+      try {
+        // This requires direct REST API call to Advanced Security APIs
+        const orgName = connection.serverUrl.split("/")[3];
+        const endpoint = `https://advsec.dev.azure.com/${orgName}/${args.project}/_apis/alert/repositories/${args.repository}/alerts`;
+        
+        const filters = [];
+        if (args.alertType) filters.push(`alertType=${args.alertType}`);
+        if (args.states) filters.push(`states=${args.states.join(',')}`);
+        if (args.severities) filters.push(`severities=${args.severities.join(',')}`);
+        if (args.top) filters.push(`$top=${args.top}`);
+        if (args.onlyDefaultBranch !== false) filters.push('onlyDefaultBranch=true');
+        
+        const url = filters.length > 0 ? `${endpoint}?${filters.join('&')}` : endpoint;
+        
+        const result = {
+          message: "Advanced Security alerts functionality requires direct REST API implementation with proper authentication.",
+          repository: args.repository,
+          endpoint: url,
+          alertType: args.alertType || 'all',
+          states: args.states || [],
+          severities: args.severities || []
+        };
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching security alerts: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1546,14 +1945,28 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project", "repository", "alertId"]
     },
     handler: async (args, connection) => {
-      // This requires direct REST API call to Advanced Security APIs
-      const orgName = connection.serverUrl.split("/")[3];
-      const endpoint = `https://advsec.dev.azure.com/${orgName}/${args.project}/_apis/alert/repositories/${args.repository}/alerts/${args.alertId}`;
-      
-      return `Advanced Security alert details functionality requires direct REST API implementation with proper authentication.\\n` +
-             `Repository: ${args.repository}\\n` +
-             `Alert ID: ${args.alertId}\\n` +
-             `Endpoint: ${endpoint}`;
+      try {
+        // This requires direct REST API call to Advanced Security APIs
+        const orgName = connection.serverUrl.split("/")[3];
+        const endpoint = `https://advsec.dev.azure.com/${orgName}/${args.project}/_apis/alert/repositories/${args.repository}/alerts/${args.alertId}`;
+        
+        const result = {
+          message: "Advanced Security alert details functionality requires direct REST API implementation with proper authentication.",
+          repository: args.repository,
+          alertId: args.alertId,
+          endpoint
+        };
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error fetching security alert details: ${errorMessage}` }],
+          isError: true
+        };
+      }
     }
   },
 
@@ -1571,19 +1984,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["workItemId"]
     },
     handler: async (args, connection) => {
-      const witApi = await connection.getWorkItemTrackingApi();
-      const workItem = await witApi.getWorkItem(args.workItemId);
-      
-      if (!workItem) {
-        return `Work item ${args.workItemId} not found.`;
+      try {
+        const witApi = await connection.getWorkItemTrackingApi();
+        const workItem = await witApi.getWorkItem(args.workItemId);
+        
+        if (!workItem) {
+          return {
+            content: [{ type: "text", text: `Work item ${args.workItemId} not found.` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting work item: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const fields = workItem.fields || {};
-      return `# Work Item ${workItem.id}: ${fields["System.Title"]}\\n\\n` +
-             `**Type**: ${fields["System.WorkItemType"]}\\n` +
-             `**State**: ${fields["System.State"]}\\n` +
-             `**Assigned To**: ${fields["System.AssignedTo"]?.displayName || "Unassigned"}\\n` +
-             `**Created**: ${fields["System.CreatedDate"]}`;
     }
   },
 
@@ -1597,20 +2018,26 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       }
     },
     handler: async (args, connection) => {
-      const coreApi = await connection.getCoreApi();
-      const projects = await coreApi.getProjects();
-      
-      let filteredProjects = projects;
-      if (args.nameFilter) {
-        const lowerFilter = args.nameFilter.toLowerCase();
-        filteredProjects = projects.filter(p => p.name?.toLowerCase().includes(lowerFilter));
+      try {
+        const coreApi = await connection.getCoreApi();
+        const projects = await coreApi.getProjects();
+        
+        let filteredProjects = projects;
+        if (args.nameFilter) {
+          const lowerFilter = args.nameFilter.toLowerCase();
+          filteredProjects = projects.filter(p => p.name?.toLowerCase().includes(lowerFilter));
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(filteredProjects, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing projects: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const projectList = filteredProjects.map(p => 
-        `- **${p.name}**: ${p.description || "No description"} (ID: ${p.id})`
-      ).join('\\n');
-      
-      return `# Projects (${filteredProjects.length})\\n\\n${projectList}`;
     }
   },
 
@@ -1627,18 +2054,27 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const definitions = await buildApi.getDefinitions(args.project, args.name);
-      
-      if (!definitions || definitions.length === 0) {
-        return `No build definitions found for project: ${args.project}`;
+      try {
+        const buildApi = await connection.getBuildApi();
+        const definitions = await buildApi.getDefinitions(args.project, args.name);
+        
+        if (!definitions || definitions.length === 0) {
+          return {
+            content: [{ type: "text", text: `No build definitions found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(definitions, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing build definitions: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const defList = definitions.map(d => 
-        `- **${d.name}** (ID: ${d.id}): ${(d as any).description || "No description"} - Type: ${d.type}`
-      ).join('\\n');
-      
-      return `# Build Definitions for ${args.project} (${definitions.length})\\n\\n${defList}`;
     }
   },
 
@@ -1656,30 +2092,39 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
       required: ["project"]
     },
     handler: async (args, connection) => {
-      const buildApi = await connection.getBuildApi();
-      const top = args.top || 10;
-      
-      let definitionIds: number[] | undefined;
-      if (args.definitionIds) {
-        definitionIds = args.definitionIds.split(',').map((id: string) => parseInt(id.trim()));
+      try {
+        const buildApi = await connection.getBuildApi();
+        const top = args.top || 10;
+        
+        let definitionIds: number[] | undefined;
+        if (args.definitionIds) {
+          definitionIds = args.definitionIds.split(',').map((id: string) => parseInt(id.trim()));
+        }
+        
+        const builds = await buildApi.getBuilds(
+          args.project, 
+          definitionIds, 
+          undefined, undefined, undefined, undefined, undefined, undefined, 
+          args.statusFilter, undefined, undefined, undefined, top
+        );
+        
+        if (!builds || builds.length === 0) {
+          return {
+            content: [{ type: "text", text: `No builds found for project: ${args.project}` }],
+            isError: true
+          };
+        }
+        
+        return {
+          content: [{ type: "text", text: JSON.stringify(builds, null, 2) }]
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error getting builds: ${errorMessage}` }],
+          isError: true
+        };
       }
-      
-      const builds = await buildApi.getBuilds(
-        args.project, 
-        definitionIds, 
-        undefined, undefined, undefined, undefined, undefined, undefined, 
-        args.statusFilter, undefined, undefined, undefined, top
-      );
-      
-      if (!builds || builds.length === 0) {
-        return `No builds found for project: ${args.project}`;
-      }
-      
-      const buildList = builds.map(b => 
-        `- **Build ${b.buildNumber}**: ${b.definition?.name} - ${b.status} (${b.result || "In Progress"})`
-      ).join('\\n');
-      
-      return `# Recent builds for ${args.project} (${builds.length})\\n\\n${buildList}`;
     }
   }
 ];
