@@ -209,6 +209,183 @@ app.get("/api/tools", (req, res) => {
   });
 });
 
+// MCP JSON-RPC endpoint
+app.post("/mcp", async (req, res) => {
+  try {
+    const request = req.body;
+    
+    if (!request.jsonrpc || request.jsonrpc !== "2.0") {
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32600, message: "Invalid Request" },
+        id: request.id || null
+      });
+    }
+
+    // Handle initialize request
+    if (request.method === "initialize") {
+      const response = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          protocolVersion: "2024-11-05",
+          capabilities: {
+            tools: {
+              listChanged: true
+            }
+          },
+          serverInfo: {
+            name: "Azure DevOps MCP Server (PAT)",
+            version: packageVersion
+          }
+        }
+      };
+      return res.json(response);
+    }
+
+    // Handle tools/list request
+    if (request.method === "tools/list") {
+      const response = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          tools: [
+            {
+              name: "wit_get_work_item",
+              description: "Get a single work item by ID",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  id: { type: "number", description: "Work item ID" },
+                  project: { type: "string", description: "Project name (optional)" }
+                },
+                required: ["id"]
+              }
+            },
+            {
+              name: "core_list_projects",
+              description: "List all projects in the organization",
+              inputSchema: {
+                type: "object",
+                properties: {}
+              }
+            },
+            {
+              name: "build_get_builds",
+              description: "Get builds for a project",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  project: { type: "string", description: "Project name" }
+                },
+                required: ["project"]
+              }
+            }
+          ]
+        }
+      };
+      return res.json(response);
+    }
+
+    // Handle tools/call request
+    if (request.method === "tools/call") {
+      const { name, arguments: args } = request.params;
+      
+      try {
+        let result;
+        
+        if (name === "wit_get_work_item") {
+          const { id, project } = args;
+          if (!id) {
+            throw new Error("Work item ID is required");
+          }
+          
+          const client = await getAzureDevOpsClient();
+          const witApi = await client.getWorkItemTrackingApi();
+          const workItem = await witApi.getWorkItem(id);
+          
+          result = {
+            content: [{
+              type: "text",
+              text: `Work Item #${workItem.id}: ${workItem.fields!["System.Title"]}\n` +
+                    `Type: ${workItem.fields!["System.WorkItemType"]}\n` +
+                    `State: ${workItem.fields!["System.State"]}\n` +
+                    `Assigned To: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
+                    `Created: ${workItem.fields!["System.CreatedDate"]}`
+            }]
+          };
+        } else if (name === "core_list_projects") {
+          const client = await getAzureDevOpsClient();
+          const coreApi = await client.getCoreApi();
+          const projects = await coreApi.getProjects();
+          
+          result = {
+            content: [{
+              type: "text",
+              text: `Found ${projects.length} project(s):\n` +
+                    projects.map(p => `- ${p.name} (${p.state})`).join('\n')
+            }]
+          };
+        } else if (name === "build_get_builds") {
+          const { project } = args;
+          if (!project) {
+            throw new Error("Project name is required");
+          }
+          
+          const client = await getAzureDevOpsClient();
+          const buildApi = await client.getBuildApi();
+          const builds = await buildApi.getBuilds(project, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 10);
+          
+          result = {
+            content: [{
+              type: "text",
+              text: `Recent builds for ${project}:\n` +
+                    builds.map(b => `- Build ${b.buildNumber}: ${b.status} (${b.result || 'In Progress'})`).join('\n')
+            }]
+          };
+        } else {
+          throw new Error(`Unknown tool: ${name}`);
+        }
+        
+        const response = {
+          jsonrpc: "2.0",
+          id: request.id,
+          result
+        };
+        return res.json(response);
+        
+      } catch (error: any) {
+        const response = {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: {
+            code: -32000,
+            message: error.message || "Tool execution failed"
+          }
+        };
+        return res.json(response);
+      }
+    }
+
+    // Method not found
+    const response = {
+      jsonrpc: "2.0",
+      id: request.id,
+      error: { code: -32601, message: "Method not found" }
+    };
+    return res.json(response);
+
+  } catch (error: any) {
+    console.error("Error handling MCP request:", error);
+    const response = {
+      jsonrpc: "2.0",
+      id: req.body.id || null,
+      error: { code: -32603, message: "Internal error" }
+    };
+    return res.status(500).json(response);
+  }
+});
+
 // Root endpoint with API documentation
 app.get("/", (req, res) => {
   res.json({
@@ -217,12 +394,13 @@ app.get("/", (req, res) => {
     organization: orgName,
     endpoints: {
       health: "GET /health - Health check",
+      mcp: "POST /mcp - MCP JSON-RPC 2.0 endpoint",
       tools: "GET /api/tools - List available tools",
       getWorkItem: "POST /api/tools/wit_get_work_item - Get work item by ID",
       listProjects: "POST /api/tools/core_list_projects - List projects",
       getBuilds: "POST /api/tools/build_get_builds - Get project builds"
     },
-    documentation: "Simple HTTP API for Azure DevOps operations"
+    documentation: "Azure DevOps MCP Server with both HTTP API and MCP protocol support"
   });
 });
 
