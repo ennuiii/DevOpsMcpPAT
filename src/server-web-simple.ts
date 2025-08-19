@@ -68,13 +68,13 @@ async function getAzureDevOpsClient(): Promise<azdev.WebApi> {
 // Comprehensive tools without problematic imports
 const allTools: ComprehensiveTool[] = comprehensiveToolsComplete;
 
-// Tool utilities with balanced optimization (preserve MCP compatibility)
+// Tool utilities with ultra-minimal optimization
 function getToolsForMcp() {
   return allTools.map(tool => {
-    // Moderate description shortening (keep more readable)
-    const shortDesc = tool.description.length > 80 ? tool.description.substring(0, 77) + "..." : tool.description;
+    // No description at all for maximum optimization
+    const shortDesc = "";
     
-    // Preserve schema structure but remove only descriptions
+    // Ultra-minimal schema with only essential MCP properties
     const optimizedSchema = {
       type: tool.inputSchema.type,
       properties: Object.fromEntries(
@@ -83,22 +83,11 @@ function getToolsForMcp() {
           {
             type: (prop as any).type,
             ...(((prop as any).enum) ? { enum: (prop as any).enum } : {}),
-            // Keep all other properties that might be needed for MCP compatibility
-            ...Object.fromEntries(
-              Object.entries(prop as any).filter(([k, v]) => 
-                k !== 'description' && k !== 'type' && k !== 'enum'
-              )
-            )
+            ...(((prop as any).items) ? { items: (prop as any).items } : {})
           }
         ])
       ),
-      ...(tool.inputSchema.required ? { required: tool.inputSchema.required } : {}),
-      // Preserve any other schema properties
-      ...Object.fromEntries(
-        Object.entries(tool.inputSchema).filter(([k, v]) => 
-          k !== 'type' && k !== 'properties' && k !== 'required'
-        )
-      )
+      ...(tool.inputSchema.required ? { required: tool.inputSchema.required } : {})
     };
     
     return {

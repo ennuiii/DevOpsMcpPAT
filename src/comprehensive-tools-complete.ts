@@ -3,10 +3,10 @@
 
 import { WebApi } from "azure-devops-node-api";
 
-// Microsoft-compatible tool definitions
+// Microsoft-compatible tool definitions (optimized)
 export interface ComprehensiveTool {
   name: string;
-  description: string;
+  description?: string; // Optional - generated dynamically for minimal size
   inputSchema: {
     type: string;
     properties: Record<string, any>;
@@ -35,19 +35,18 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "core_list_projects",
-    description: "Retrieve a list of projects in your Azure DevOps organization",
+    
     inputSchema: {
       type: "object",
       properties: {
         stateFilter: { 
           type: "string", 
           enum: ["all", "wellFormed", "createPending", "deleted"],
-          description: "Filter projects by their state. Defaults to 'wellFormed'." 
         },
-        top: { type: "number", description: "The maximum number of projects to return. Defaults to 100." },
-        skip: { type: "number", description: "The number of projects to skip for pagination. Defaults to 0." },
-        continuationToken: { type: "number", description: "Continuation token for pagination." },
-        projectNameFilter: { type: "string", description: "Filter projects by name. Supports partial matches." }
+        top: { type: "number" },
+        skip: { type: "number" },
+        continuationToken: { type: "number" },
+        projectNameFilter: { type: "string" }
       }
     },
     handler: async (args, connection) => {
@@ -86,14 +85,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "core_list_project_teams",
-    description: "Retrieve a list of teams for the specified Azure DevOps project",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "The name or ID of the Azure DevOps project." },
-        mine: { type: "boolean", description: "If true, only return teams that the authenticated user is a member of." },
-        top: { type: "number", description: "The maximum number of teams to return. Defaults to 100." },
-        skip: { type: "number", description: "The number of teams to skip for pagination. Defaults to 0." }
+        project: { type: "string" },
+        mine: { type: "boolean" },
+        top: { type: "number" },
+        skip: { type: "number" }
       },
       required: ["project"]
     },
@@ -121,11 +120,11 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "core_get_identity_ids",
-    description: "Retrieve Azure DevOps identity IDs for a provided search filter",
+    
     inputSchema: {
       type: "object",
       properties: {
-        searchFilter: { type: "string", description: "Search filter (unique name, display name, email) to retrieve identity IDs for." }
+        searchFilter: { type: "string" }
       },
       required: ["searchFilter"]
     },
@@ -161,12 +160,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "wit_get_work_item",
-    description: "Get a work item by ID with full details",
+    
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "number", description: "Work item ID" },
-        expand: { type: "string", description: "Expand options (All, Relations, Fields, etc.)" }
+        id: { type: "number" },
+        expand: { type: "string" }
       },
       required: ["id"]
     },
@@ -194,18 +193,18 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wit_create_work_item",
-    description: "Create a new work item",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        type: { type: "string", description: "Work item type (Task, Bug, User Story, etc.)" },
-        title: { type: "string", description: "Work item title" },
-        description: { type: "string", description: "Work item description (optional)" },
-        assignedTo: { type: "string", description: "Assigned to user email (optional)" },
-        tags: { type: "string", description: "Comma-separated tags (optional)" },
-        areaPath: { type: "string", description: "Area path (optional)" },
-        iterationPath: { type: "string", description: "Iteration path (optional)" }
+        project: { type: "string" },
+        type: { type: "string" },
+        title: { type: "string" },
+        description: { type: "string" },
+        assignedTo: { type: "string" },
+        tags: { type: "string" },
+        areaPath: { type: "string" },
+        iterationPath: { type: "string" }
       },
       required: ["project", "type", "title"]
     },
@@ -250,16 +249,16 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wit_update_work_item",
-    description: "Update an existing work item",
+    
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "number", description: "Work item ID to update" },
-        title: { type: "string", description: "Updated title (optional)" },
-        description: { type: "string", description: "Updated description (optional)" },
-        assignedTo: { type: "string", description: "Updated assigned to user email (optional)" },
-        state: { type: "string", description: "Updated state (optional)" },
-        tags: { type: "string", description: "Updated comma-separated tags (optional)" }
+        id: { type: "number" },
+        title: { type: "string" },
+        description: { type: "string" },
+        assignedTo: { type: "string" },
+        state: { type: "string" },
+        tags: { type: "string" }
       },
       required: ["id"]
     },
@@ -309,12 +308,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wit_query_work_items",
-    description: "Query work items using WIQL",
+    
     inputSchema: {
       type: "object",
       properties: {
-        wiql: { type: "string", description: "WIQL query string" },
-        project: { type: "string", description: "Project name or ID (optional)" }
+        wiql: { type: "string" },
+        project: { type: "string" }
       },
       required: ["wiql"]
     },
@@ -348,12 +347,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wit_delete_work_item",
-    description: "Delete a work item",
+    
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "number", description: "Work item ID to delete" },
-        destroy: { type: "boolean", description: "If true, permanently delete the work item. If false, move to recycle bin." }
+        id: { type: "number" },
+        destroy: { type: "boolean" }
       },
       required: ["id"]
     },
@@ -381,16 +380,16 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "build_get_definitions",
-    description: "Retrieves a list of build definitions for a given project",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name to get build definitions for" },
-        name: { type: "string", description: "Name of the build definition to filter" },
-        repositoryId: { type: "string", description: "Repository ID to filter build definitions" },
-        repositoryType: { type: "string", enum: ["TfsGit", "GitHub", "BitbucketCloud"], description: "Type of repository to filter build definitions" },
-        top: { type: "number", description: "Maximum number of build definitions to return" },
-        includeLatestBuilds: { type: "boolean", description: "Whether to include the latest builds for each definition" }
+        project: { type: "string" },
+        name: { type: "string" },
+        repositoryId: { type: "string" },
+        repositoryType: { type: "string", enum: ["TfsGit", "GitHub", "BitbucketCloud"] },
+        top: { type: "number" },
+        includeLatestBuilds: { type: "boolean" }
       },
       required: ["project"]
     },
@@ -436,17 +435,17 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_get_builds",
-    description: "Retrieves a list of builds for a given project",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name to get builds for" },
-        definitions: { type: "array", items: { type: "number" }, description: "Array of build definition IDs to filter builds" },
-        buildNumber: { type: "string", description: "Build number to filter builds" },
-        top: { type: "number", description: "Maximum number of builds to return" },
-        statusFilter: { type: "number", description: "Status filter for the build" },
-        resultFilter: { type: "number", description: "Result filter for the build" },
-        branchName: { type: "string", description: "Branch name to filter builds" }
+        project: { type: "string" },
+        definitions: { type: "array", items: { type: "number" } },
+        buildNumber: { type: "string" },
+        top: { type: "number" },
+        statusFilter: { type: "number" },
+        resultFilter: { type: "number" },
+        branchName: { type: "string" }
       },
       required: ["project"]
     },
@@ -496,14 +495,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_run_build",
-    description: "Triggers a new build for a specified definition",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name to run the build in" },
-        definitionId: { type: "number", description: "ID of the build definition to run" },
-        sourceBranch: { type: "string", description: "Source branch to run the build from. If not provided, the default branch will be used." },
-        parameters: { type: "object", description: "Custom build parameters as key-value pairs" }
+        project: { type: "string" },
+        definitionId: { type: "number" },
+        sourceBranch: { type: "string" },
+        parameters: { type: "object" }
       },
       required: ["project", "definitionId"]
     },
@@ -541,12 +540,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_get_status",
-    description: "Fetches the status of a specific build",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name to get the build status for" },
-        buildId: { type: "number", description: "ID of the build to get the status for" }
+        project: { type: "string" },
+        buildId: { type: "number" }
       },
       required: ["project", "buildId"]
     },
@@ -577,12 +576,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_get_logs",
-    description: "Retrieves the logs for a specific build",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name to get the build log for" },
-        buildId: { type: "number", description: "ID of the build to get the log for" }
+        project: { type: "string" },
+        buildId: { type: "number" }
       },
       required: ["project", "buildId"]
     },
@@ -613,15 +612,15 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_get_log_content",
-    description: "Get specific build log content by log ID",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name" },
-        buildId: { type: "number", description: "ID of the build" },
-        logId: { type: "number", description: "ID of the log to retrieve" },
-        startLine: { type: "number", description: "Starting line number, defaults to 0" },
-        endLine: { type: "number", description: "Ending line number, defaults to end of log" }
+        project: { type: "string" },
+        buildId: { type: "number" },
+        logId: { type: "number" },
+        startLine: { type: "number" },
+        endLine: { type: "number" }
       },
       required: ["project", "buildId", "logId"]
     },
@@ -652,13 +651,13 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_get_changes",
-    description: "Get the changes associated with a specific build",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name" },
-        buildId: { type: "number", description: "ID of the build to get changes for" },
-        top: { type: "number", description: "Number of changes to retrieve, defaults to 100" }
+        project: { type: "string" },
+        buildId: { type: "number" },
+        top: { type: "number" }
       },
       required: ["project", "buildId"]
     },
@@ -689,12 +688,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_get_definition_revisions",
-    description: "Retrieves a list of revisions for a specific build definition",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name" },
-        definitionId: { type: "number", description: "ID of the build definition to get revisions for" }
+        project: { type: "string" },
+        definitionId: { type: "number" }
       },
       required: ["project", "definitionId"]
     },
@@ -725,15 +724,15 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_update_stage",
-    description: "Updates the stage of a specific build",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project ID or name" },
-        buildId: { type: "number", description: "ID of the build to update" },
-        stageName: { type: "string", description: "Name of the stage to update" },
-        status: { type: "string", enum: ["cancel", "retry"], description: "New status for the stage" },
-        forceRetryAllJobs: { type: "boolean", description: "Whether to force retry all jobs in the stage" }
+        project: { type: "string" },
+        buildId: { type: "number" },
+        stageName: { type: "string" },
+        status: { type: "string", enum: ["cancel", "retry"] },
+        forceRetryAllJobs: { type: "boolean" }
       },
       required: ["project", "buildId", "stageName", "status"]
     },
@@ -768,11 +767,11 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "git_list_repositories",
-    description: "List Git repositories",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID (optional)" }
+        project: { type: "string" }
       }
     },
     handler: async (args, connection) => {
@@ -802,12 +801,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "git_get_repository",
-    description: "Get details of a specific repository",
+    
     inputSchema: {
       type: "object",
       properties: {
-        repositoryId: { type: "string", description: "Repository ID or name" },
-        project: { type: "string", description: "Project name or ID (optional)" }
+        repositoryId: { type: "string" },
+        project: { type: "string" }
       },
       required: ["repositoryId"]
     },
@@ -838,12 +837,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "git_get_branches",
-    description: "Get branches for a repository",
+    
     inputSchema: {
       type: "object",
       properties: {
-        repositoryId: { type: "string", description: "Repository ID or name" },
-        project: { type: "string", description: "Project name or ID (optional)" }
+        repositoryId: { type: "string" },
+        project: { type: "string" }
       },
       required: ["repositoryId"]
     },
@@ -874,14 +873,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "git_get_commits",
-    description: "Get commits for a repository",
+    
     inputSchema: {
       type: "object",
       properties: {
-        repositoryId: { type: "string", description: "Repository ID or name" },
-        project: { type: "string", description: "Project name or ID (optional)" },
-        branch: { type: "string", description: "Branch name to get commits from" },
-        top: { type: "number", description: "Maximum number of commits to return" }
+        repositoryId: { type: "string" },
+        project: { type: "string" },
+        branch: { type: "string" },
+        top: { type: "number" }
       },
       required: ["repositoryId"]
     },
@@ -917,14 +916,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "git_get_pull_requests",
-    description: "Get pull requests for a repository",
+    
     inputSchema: {
       type: "object",
       properties: {
-        repositoryId: { type: "string", description: "Repository ID or name" },
-        project: { type: "string", description: "Project name or ID (optional)" },
-        status: { type: "string", enum: ["active", "completed", "abandoned", "all"], description: "Pull request status filter" },
-        top: { type: "number", description: "Maximum number of pull requests to return" }
+        repositoryId: { type: "string" },
+        project: { type: "string" },
+        status: { type: "string", enum: ["active", "completed", "abandoned", "all"] },
+        top: { type: "number" }
       },
       required: ["repositoryId"]
     },
@@ -960,14 +959,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "git_get_items",
-    description: "Get items (files/folders) from a repository",
+    
     inputSchema: {
       type: "object",
       properties: {
-        repositoryId: { type: "string", description: "Repository ID or name" },
-        project: { type: "string", description: "Project name or ID (optional)" },
-        scopePath: { type: "string", description: "Path to scope the search to (optional)" },
-        recursionLevel: { type: "string", enum: ["none", "oneLevel", "full"], description: "Recursion level for getting items" }
+        repositoryId: { type: "string" },
+        project: { type: "string" },
+        scopePath: { type: "string" },
+        recursionLevel: { type: "string", enum: ["none", "oneLevel", "full"] }
       },
       required: ["repositoryId"]
     },
@@ -1008,11 +1007,11 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "wiki_list_wikis",
-    description: "Retrieve a list of wikis for an organization or project",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "The project name or ID to filter wikis. If not provided, all wikis in the organization will be returned." }
+        project: { type: "string" }
       }
     },
     handler: async (args, connection) => {
@@ -1039,12 +1038,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wiki_get_wiki",
-    description: "Get the wiki by wikiIdentifier",
+    
     inputSchema: {
       type: "object",
       properties: {
-        wikiIdentifier: { type: "string", description: "The unique identifier of the wiki." },
-        project: { type: "string", description: "The project name or ID where the wiki is located. If not provided, the default project will be used." }
+        wikiIdentifier: { type: "string" },
+        project: { type: "string" }
       },
       required: ["wikiIdentifier"]
     },
@@ -1075,15 +1074,15 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wiki_list_pages",
-    description: "Retrieve a list of wiki pages for a specific wiki and project.",
+    
     inputSchema: {
       type: "object",
       properties: {
-        wikiIdentifier: { type: "string", description: "The unique identifier of the wiki." },
-        project: { type: "string", description: "The project name or ID where the wiki is located." },
-        top: { type: "number", default: 20, description: "The maximum number of pages to return. Defaults to 20." },
-        continuationToken: { type: "string", description: "Token for pagination to retrieve the next set of pages." },
-        pageViewsForDays: { type: "number", description: "Number of days to retrieve page views for. If not specified, page views are not included." }
+        wikiIdentifier: { type: "string" },
+        project: { type: "string" },
+        top: { type: "number"},
+        continuationToken: { type: "string" },
+        pageViewsForDays: { type: "number" }
       },
       required: ["wikiIdentifier", "project"]
     },
@@ -1118,13 +1117,13 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wiki_get_page_content",
-    description: "Retrieve wiki page content by wikiIdentifier and path",
+    
     inputSchema: {
       type: "object",
       properties: {
-        wikiIdentifier: { type: "string", description: "The unique identifier of the wiki." },
-        project: { type: "string", description: "The project name or ID where the wiki is located." },
-        path: { type: "string", description: "The path of the wiki page to retrieve content for." }
+        wikiIdentifier: { type: "string" },
+        project: { type: "string" },
+        path: { type: "string" }
       },
       required: ["wikiIdentifier", "project", "path"]
     },
@@ -1158,15 +1157,15 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "wiki_create_or_update_page",
-    description: "Create or update a wiki page with content",
+    
     inputSchema: {
       type: "object",
       properties: {
-        wikiIdentifier: { type: "string", description: "The unique identifier or name of the wiki." },
-        path: { type: "string", description: "The path of the wiki page (e.g., '/Home' or '/Documentation/Setup')." },
-        content: { type: "string", description: "The content of the wiki page in markdown format." },
-        project: { type: "string", description: "The project name or ID where the wiki is located. If not provided, the default project will be used." },
-        etag: { type: "string", description: "ETag for editing existing pages (optional, will be fetched if not provided)." }
+        wikiIdentifier: { type: "string" },
+        path: { type: "string" },
+        content: { type: "string" },
+        project: { type: "string" },
+        etag: { type: "string" }
       },
       required: ["wikiIdentifier", "path", "content"]
     },
@@ -1205,16 +1204,16 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "search_code",
-    description: "Search Azure DevOps Repositories for a given search text",
+    
     inputSchema: {
       type: "object",
       properties: {
-        searchText: { type: "string", description: "Keywords to search for in code repositories" },
-        project: { type: "array", items: { type: "string" }, description: "Filter by projects" },
-        repository: { type: "array", items: { type: "string" }, description: "Filter by repositories" },
-        path: { type: "array", items: { type: "string" }, description: "Filter by paths" },
-        branch: { type: "array", items: { type: "string" }, description: "Filter by branches" },
-        top: { type: "number", description: "Maximum number of results to return", default: 5 }
+        searchText: { type: "string" },
+        project: { type: "array", items: { type: "string" } },
+        repository: { type: "array", items: { type: "string" } },
+        path: { type: "array", items: { type: "string" } },
+        branch: { type: "array", items: { type: "string" } },
+        top: { type: "number"}
       },
       required: ["searchText"]
     },
@@ -1261,14 +1260,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "search_wiki",
-    description: "Search Azure DevOps Wiki for a given search text",
+    
     inputSchema: {
       type: "object",
       properties: {
-        searchText: { type: "string", description: "Keywords to search for wiki pages" },
-        project: { type: "array", items: { type: "string" }, description: "Filter by projects" },
-        wiki: { type: "array", items: { type: "string" }, description: "Filter by wiki names" },
-        top: { type: "number", description: "Maximum number of results to return", default: 10 }
+        searchText: { type: "string" },
+        project: { type: "array", items: { type: "string" } },
+        wiki: { type: "array", items: { type: "string" } },
+        top: { type: "number"}
       },
       required: ["searchText"]
     },
@@ -1304,17 +1303,17 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "search_workitem",
-    description: "Get Azure DevOps Work Item search results for a given search text",
+    
     inputSchema: {
       type: "object",
       properties: {
-        searchText: { type: "string", description: "Search text to find in work items" },
-        project: { type: "array", items: { type: "string" }, description: "Filter by projects" },
-        areaPath: { type: "array", items: { type: "string" }, description: "Filter by area paths" },
-        workItemType: { type: "array", items: { type: "string" }, description: "Filter by work item types" },
-        state: { type: "array", items: { type: "string" }, description: "Filter by work item states" },
-        assignedTo: { type: "array", items: { type: "string" }, description: "Filter by assigned to users" },
-        top: { type: "number", description: "Number of results to return", default: 10 }
+        searchText: { type: "string" },
+        project: { type: "array", items: { type: "string" } },
+        areaPath: { type: "array", items: { type: "string" } },
+        workItemType: { type: "array", items: { type: "string" } },
+        state: { type: "array", items: { type: "string" } },
+        assignedTo: { type: "array", items: { type: "string" } },
+        top: { type: "number"}
       },
       required: ["searchText"]
     },
@@ -1356,13 +1355,13 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "work_list_team_iterations",
-    description: "List iterations for a team",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        team: { type: "string", description: "Team name or ID" },
-        timeframe: { type: "string", enum: ["current", "past", "future"], description: "Timeframe filter" }
+        project: { type: "string" },
+        team: { type: "string" },
+        timeframe: { type: "string", enum: ["current", "past", "future"] }
       },
       required: ["project", "team"]
     },
@@ -1396,12 +1395,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "work_get_team_settings",
-    description: "Get team settings",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        team: { type: "string", description: "Team name or ID" }
+        project: { type: "string" },
+        team: { type: "string" }
       },
       required: ["project", "team"]
     },
@@ -1432,12 +1431,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "work_get_team_field_values",
-    description: "Get team field values",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        team: { type: "string", description: "Team name or ID" }
+        project: { type: "string" },
+        team: { type: "string" }
       },
       required: ["project", "team"]
     },
@@ -1471,12 +1470,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "release_list_definitions",
-    description: "List release definitions",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        searchText: { type: "string", description: "Search text for definition names (optional)" }
+        project: { type: "string" },
+        searchText: { type: "string" }
       },
       required: ["project"]
     },
@@ -1510,13 +1509,13 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "release_get_releases",
-    description: "Get releases for a project",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        definitionId: { type: "number", description: "Release definition ID to filter releases" },
-        top: { type: "number", description: "Maximum number of releases to return" }
+        project: { type: "string" },
+        definitionId: { type: "number" },
+        top: { type: "number" }
       },
       required: ["project"]
     },
@@ -1559,13 +1558,13 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "release_create_release",
-    description: "Create a new release",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        definitionId: { type: "number", description: "Release definition ID" },
-        description: { type: "string", description: "Release description (optional)" }
+        project: { type: "string" },
+        definitionId: { type: "number" },
+        description: { type: "string" }
       },
       required: ["project", "definitionId"]
     },
@@ -1595,12 +1594,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "release_get_release",
-    description: "Get details of a specific release",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        releaseId: { type: "number", description: "Release ID" }
+        project: { type: "string" },
+        releaseId: { type: "number" }
       },
       required: ["project", "releaseId"]
     },
@@ -1634,14 +1633,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "testplan_list_test_plans",
-    description: "Retrieve a paginated list of test plans from an Azure DevOps project",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "The unique identifier (ID or name) of the Azure DevOps project." },
-        filterActivePlans: { type: "boolean", description: "Filter to include only active test plans. Defaults to true." },
-        includePlanDetails: { type: "boolean", description: "Include detailed information about each test plan." },
-        continuationToken: { type: "string", description: "Token to continue fetching test plans from a previous request." }
+        project: { type: "string" },
+        filterActivePlans: { type: "boolean" },
+        includePlanDetails: { type: "boolean" },
+        continuationToken: { type: "string" }
       },
       required: ["project"]
     },
@@ -1680,15 +1679,15 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "testplan_create_test_plan",
-    description: "Create a new test plan",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        name: { type: "string", description: "Test plan name" },
-        description: { type: "string", description: "Test plan description (optional)" },
-        areaPath: { type: "string", description: "Area path for the test plan (optional)" },
-        iterationPath: { type: "string", description: "Iteration path for the test plan (optional)" }
+        project: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        areaPath: { type: "string" },
+        iterationPath: { type: "string" }
       },
       required: ["project", "name"]
     },
@@ -1720,14 +1719,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "testplan_create_test_case",
-    description: "Create a new test case",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        title: { type: "string", description: "Test case title" },
-        steps: { type: "string", description: "Test case steps (optional)" },
-        areaPath: { type: "string", description: "Area path for the test case (optional)" }
+        project: { type: "string" },
+        title: { type: "string" },
+        steps: { type: "string" },
+        areaPath: { type: "string" }
       },
       required: ["project", "title"]
     },
@@ -1764,12 +1763,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "testplan_list_test_cases",
-    description: "List test cases for a project",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        top: { type: "number", description: "Maximum number of test cases to return" }
+        project: { type: "string" },
+        top: { type: "number" }
       },
       required: ["project"]
     },
@@ -1806,14 +1805,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "testplan_add_test_cases_to_suite",
-    description: "Add test cases to a test suite",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        planId: { type: "number", description: "Test plan ID" },
-        suiteId: { type: "number", description: "Test suite ID" },
-        testCaseIds: { type: "array", items: { type: "number" }, description: "Array of test case IDs to add" }
+        project: { type: "string" },
+        planId: { type: "number" },
+        suiteId: { type: "number" },
+        testCaseIds: { type: "array", items: { type: "number" } }
       },
       required: ["project", "planId", "suiteId", "testCaseIds"]
     },
@@ -1842,12 +1841,12 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "testplan_get_test_results_from_build",
-    description: "Show test results from a build ID",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        buildId: { type: "number", description: "Build ID to get test results for" }
+        project: { type: "string" },
+        buildId: { type: "number" }
       },
       required: ["project", "buildId"]
     },
@@ -1881,17 +1880,17 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "advsec_get_alerts",
-    description: "Retrieve Advanced Security alerts for a repository",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "The name or ID of the Azure DevOps project." },
-        repository: { type: "string", description: "The name or ID of the repository to get alerts for." },
-        alertType: { type: "string", enum: ["dependency", "secret", "code"], description: "Filter alerts by type." },
-        states: { type: "array", items: { type: "string", enum: ["active", "dismissed", "fixed"] }, description: "Filter alerts by state." },
-        severities: { type: "array", items: { type: "string", enum: ["critical", "high", "medium", "low"] }, description: "Filter alerts by severity level." },
-        top: { type: "number", description: "Maximum number of alerts to return. Defaults to 100." },
-        onlyDefaultBranch: { type: "boolean", description: "If true, only return alerts found on the default branch. Defaults to true." }
+        project: { type: "string" },
+        repository: { type: "string" },
+        alertType: { type: "string", enum: ["dependency", "secret", "code"] },
+        states: { type: "array", items: { type: "string", enum: ["active", "dismissed", "fixed"] } },
+        severities: { type: "array", items: { type: "string", enum: ["critical", "high", "medium", "low"] } },
+        top: { type: "number" },
+        onlyDefaultBranch: { type: "boolean" }
       },
       required: ["project", "repository"]
     },
@@ -1934,13 +1933,13 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "advsec_get_alert_details",
-    description: "Get detailed information about a specific Advanced Security alert",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "The name or ID of the Azure DevOps project." },
-        repository: { type: "string", description: "The name or ID of the repository." },
-        alertId: { type: "number", description: "The ID of the alert to get details for." }
+        project: { type: "string" },
+        repository: { type: "string" },
+        alertId: { type: "number" }
       },
       required: ["project", "repository", "alertId"]
     },
@@ -1975,11 +1974,11 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
   // ============================================================================
   {
     name: "get_work_item",
-    description: "Get a work item by ID (alias for wit_get_work_item)",
+    
     inputSchema: {
       type: "object",
       properties: {
-        workItemId: { type: "number", description: "Work item ID" }
+        workItemId: { type: "number" }
       },
       required: ["workItemId"]
     },
@@ -2010,11 +2009,11 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "list_projects",
-    description: "List all projects (alias for core_list_projects)",
+    
     inputSchema: {
       type: "object",
       properties: {
-        nameFilter: { type: "string", description: "Filter projects by name (optional)" }
+        nameFilter: { type: "string" }
       }
     },
     handler: async (args, connection) => {
@@ -2043,13 +2042,13 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_list_definitions", 
-    description: "List build definitions for a project (alias for build_get_definitions)",
+    
     inputSchema: {
       type: "object",
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        name: { type: "string", description: "Filter by definition name (optional)" },
-        type: { type: "string", description: "Definition type filter (optional)" }
+        project: { type: "string" },
+        name: { type: "string" },
+        type: { type: "string" }
       },
       required: ["project"]
     },
@@ -2080,14 +2079,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
 
   {
     name: "build_get_builds",
-    description: "Get builds for a project (alias, already defined above)",
+    
     inputSchema: {
       type: "object", 
       properties: {
-        project: { type: "string", description: "Project name or ID" },
-        definitionIds: { type: "string", description: "Comma-separated build definition IDs (optional)" },
-        statusFilter: { type: "string", description: "Build status filter (inProgress, completed, etc.)" },
-        top: { type: "number", description: "Maximum number of builds to return (default: 10)" }
+        project: { type: "string" },
+        definitionIds: { type: "string" },
+        statusFilter: { type: "string" },
+        top: { type: "number" }
       },
       required: ["project"]
     },
