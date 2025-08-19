@@ -9,8 +9,7 @@ import * as azdev from "azure-devops-node-api";
 import { IRequestHandler } from "azure-devops-node-api/interfaces/common/VsoBaseInterfaces.js";
 
 import { packageVersion } from "./version.js";
-// import { ToolCollector } from "./tool-collector.js";
-// import { ToolDefinition } from "./tool-registry.js";
+import { comprehensiveTools, ComprehensiveTool } from "./comprehensive-tools.js";
 
 // Environment variables
 const PORT = process.env.PORT || 3000;
@@ -66,32 +65,21 @@ async function getAzureDevOpsClient(): Promise<azdev.WebApi> {
   return azureDevOpsClient;
 }
 
-// Temporarily disabled comprehensive tools for debugging
-// const toolCollector = new ToolCollector();
-// let allTools: ToolDefinition[] = [];
+// Comprehensive tools without problematic imports
+const allTools: ComprehensiveTool[] = comprehensiveTools;
 
-// Simple fallback tools for testing
-const simpleTools = [
-  {
-    name: "get_work_item",
-    description: "Get a work item by ID",
-    inputSchema: {
-      type: "object",
-      properties: {
-        workItemId: { type: "number", description: "Work item ID" }
-      },
-      required: ["workItemId"]
-    }
-  },
-  {
-    name: "list_projects",
-    description: "List all projects in Azure DevOps",
-    inputSchema: {
-      type: "object",
-      properties: {}
-    }
-  }
-];
+// Tool utilities
+function getToolsForMcp() {
+  return allTools.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema
+  }));
+}
+
+function getTool(name: string): ComprehensiveTool | undefined {
+  return allTools.find(tool => tool.name === name);
+}
 
 // Create Express app
 const app = express();
@@ -234,7 +222,7 @@ app.post("/message", async (req, res) => {
         jsonrpc: "2.0",
         id: mcpRequest.id,
         result: {
-          tools: simpleTools
+          tools: getToolsForMcp()
         }
       };
     } else if (mcpRequest.method === "tools/call") {
@@ -243,36 +231,14 @@ app.post("/message", async (req, res) => {
       try {
         console.log(`🎯 Calling tool: ${name} with args:`, args);
         
-        let result: string;
-        
-        if (name === "get_work_item") {
-          const { workItemId } = args;
-          if (!workItemId) {
-            throw new Error("workItemId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const witApi = await client.getWorkItemTrackingApi();
-          const workItem = await witApi.getWorkItem(workItemId);
-          
-          result = `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
-                   `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
-                   `**State**: ${workItem.fields!["System.State"]}\n` +
-                   `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
-                   `**Created**: ${workItem.fields!["System.CreatedDate"]}`;
-        } else if (name === "list_projects") {
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const projects = await coreApi.getProjects();
-          
-          const projectList = projects.map((project: any) => {
-            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
-          }).join('\n');
-          
-          result = `# Projects (${projects.length})\n\n${projectList}`;
-        } else {
-          throw new Error(`Tool ${name} not supported`);
+        // Find and execute the tool
+        const tool = getTool(name);
+        if (!tool) {
+          throw new Error(`Tool ${name} not found`);
         }
+        
+        const connection = await getAzureDevOpsClient();
+        const result = await tool.handler(args, connection);
         
         response = {
           jsonrpc: "2.0",
@@ -421,7 +387,7 @@ app.post("/sse", async (req, res) => {
         jsonrpc: "2.0",
         id: mcpRequest.id,
         result: {
-          tools: simpleTools
+          tools: getToolsForMcp()
         }
       };
     } else if (mcpRequest.method === "tools/call") {
@@ -430,36 +396,14 @@ app.post("/sse", async (req, res) => {
       try {
         console.log(`🎯 Calling tool: ${name} with args:`, args);
         
-        let result: string;
-        
-        if (name === "get_work_item") {
-          const { workItemId } = args;
-          if (!workItemId) {
-            throw new Error("workItemId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const witApi = await client.getWorkItemTrackingApi();
-          const workItem = await witApi.getWorkItem(workItemId);
-          
-          result = `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
-                   `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
-                   `**State**: ${workItem.fields!["System.State"]}\n` +
-                   `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
-                   `**Created**: ${workItem.fields!["System.CreatedDate"]}`;
-        } else if (name === "list_projects") {
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const projects = await coreApi.getProjects();
-          
-          const projectList = projects.map((project: any) => {
-            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
-          }).join('\n');
-          
-          result = `# Projects (${projects.length})\n\n${projectList}`;
-        } else {
-          throw new Error(`Tool ${name} not supported`);
+        // Find and execute the tool
+        const tool = getTool(name);
+        if (!tool) {
+          throw new Error(`Tool ${name} not found`);
         }
+        
+        const connection = await getAzureDevOpsClient();
+        const result = await tool.handler(args, connection);
         
         response = {
           jsonrpc: "2.0",
@@ -710,7 +654,7 @@ app.post("/mcp", async (req, res) => {
         jsonrpc: "2.0",
         id: request.id,
         result: {
-          tools: simpleTools
+          tools: getToolsForMcp()
         }
       };
       return res.json(response);
