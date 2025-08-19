@@ -355,7 +355,26 @@ app.post("/message", async (req, res) => {
     const responseStr = JSON.stringify(response);
     const tokenCount = getTokenCount(responseStr);
     const sizeBytes = Buffer.byteLength(responseStr, 'utf8');
-    console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t]:`, responseStr.length > 200 ? responseStr.substring(0, 200) + '...' : responseStr);
+    
+    // Detailed breakdown for tools/list responses
+    if (mcpRequest.method === "tools/list" && response.result?.tools) {
+      const tools = response.result.tools;
+      const descriptionsOnly = tools.map(t => t.description).join('');
+      const descriptionsSize = Buffer.byteLength(descriptionsOnly, 'utf8');
+      const schemasOnly = JSON.stringify(tools.map(t => t.inputSchema));
+      const schemasSize = Buffer.byteLength(schemasOnly, 'utf8');
+      const namesOnly = tools.map(t => t.name).join('');
+      const namesSize = Buffer.byteLength(namesOnly, 'utf8');
+      
+      console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t] BREAKDOWN:`);
+      console.log(`  📝 Descriptions: ${descriptionsSize}B (~${getTokenCount(descriptionsOnly)}t, ${Math.round(descriptionsSize/sizeBytes*100)}%)`);
+      console.log(`  🔧 Schemas: ${schemasSize}B (~${getTokenCount(schemasOnly)}t, ${Math.round(schemasSize/sizeBytes*100)}%)`);
+      console.log(`  🏷️ Names: ${namesSize}B (~${getTokenCount(namesOnly)}t, ${Math.round(namesSize/sizeBytes*100)}%)`);
+      console.log(`  📦 Other (JSON structure): ${sizeBytes - descriptionsSize - schemasSize - namesSize}B`);
+      console.log(`  📊 Total tools: ${tools.length}`);
+    } else {
+      console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t]:`, responseStr.length > 200 ? responseStr.substring(0, 200) + '...' : responseStr);
+    }
     res.json(response);
     
   } catch (error: any) {
@@ -535,7 +554,26 @@ app.post("/sse", async (req, res) => {
     const responseStr = JSON.stringify(response);
     const tokenCount = getTokenCount(responseStr);
     const sizeBytes = Buffer.byteLength(responseStr, 'utf8');
-    console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t]:`, responseStr.length > 200 ? responseStr.substring(0, 200) + '...' : responseStr);
+    
+    // Detailed breakdown for tools/list responses
+    if (mcpRequest.method === "tools/list" && response.result?.tools) {
+      const tools = response.result.tools;
+      const descriptionsOnly = tools.map(t => t.description).join('');
+      const descriptionsSize = Buffer.byteLength(descriptionsOnly, 'utf8');
+      const schemasOnly = JSON.stringify(tools.map(t => t.inputSchema));
+      const schemasSize = Buffer.byteLength(schemasOnly, 'utf8');
+      const namesOnly = tools.map(t => t.name).join('');
+      const namesSize = Buffer.byteLength(namesOnly, 'utf8');
+      
+      console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t] BREAKDOWN:`);
+      console.log(`  📝 Descriptions: ${descriptionsSize}B (~${getTokenCount(descriptionsOnly)}t, ${Math.round(descriptionsSize/sizeBytes*100)}%)`);
+      console.log(`  🔧 Schemas: ${schemasSize}B (~${getTokenCount(schemasOnly)}t, ${Math.round(schemasSize/sizeBytes*100)}%)`);
+      console.log(`  🏷️ Names: ${namesSize}B (~${getTokenCount(namesOnly)}t, ${Math.round(namesSize/sizeBytes*100)}%)`);
+      console.log(`  📦 Other (JSON structure): ${sizeBytes - descriptionsSize - schemasSize - namesSize}B`);
+      console.log(`  📊 Total tools: ${tools.length}`);
+    } else {
+      console.log(`📤 MCP Response [${sizeBytes}B, ~${tokenCount}t]:`, responseStr.length > 200 ? responseStr.substring(0, 200) + '...' : responseStr);
+    }
     res.json(response);
     
   } catch (error: any) {
