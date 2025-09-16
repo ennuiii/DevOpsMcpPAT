@@ -98,6 +98,29 @@ function getToolsForMcp() {
   });
 }
 
+// Execute a tool by name with provided args using the shared WebApi connection
+async function executeToolByName(name: string, args: any) {
+  const tool = getTool(name);
+  if (!tool) {
+    throw new Error(`Unknown tool: ${name}`);
+  }
+  const client = await getAzureDevOpsClient();
+  const result = await tool.handler(args || {}, client);
+
+  // Normalize result for HTTP/MCP responses
+  if (typeof result === "string") {
+    return {
+      content: [
+        {
+          type: "text",
+          text: result,
+        },
+      ],
+    };
+  }
+  return result;
+}
+
 // Token counting utility
 function getTokenCount(text: string): number {
   // Rough approximation: ~4 characters per token
@@ -578,132 +601,24 @@ app.post("/sse", async (req, res) => {
   }
 });
 
-// Get work item endpoint
-app.post("/api/tools/wit_get_work_item", async (req, res) => {
-  try {
-    const { id, project } = req.body;
-    
-    if (!id) {
-      return res.status(400).json({ error: "Work item ID is required" });
-    }
-    
-    const client = await getAzureDevOpsClient();
-    const witApi = await client.getWorkItemTrackingApi();
-    const workItem = await witApi.getWorkItem(id);
-    
-    res.json({
-      success: true,
-      result: {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            id: workItem.id,
-            title: workItem.fields!["System.Title"],
-            type: workItem.fields!["System.WorkItemType"],
-            state: workItem.fields!["System.State"],
-            assignedTo: workItem.fields!["System.AssignedTo"]?.displayName,
-            createdDate: workItem.fields!["System.CreatedDate"],
-            description: workItem.fields!["System.Description"]
-          })
-        }]
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// List projects endpoint
-app.post("/api/tools/core_list_projects", async (req, res) => {
-  try {
-    const client = await getAzureDevOpsClient();
-    const coreApi = await client.getCoreApi();
-    const projects = await coreApi.getProjects();
-    
-    res.json({
-      success: true,
-      result: {
-        content: [{
-          type: "text",
-          text: JSON.stringify(projects.map(p => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            state: p.state
-          })))
-        }]
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Get builds endpoint
-app.post("/api/tools/build_get_builds", async (req, res) => {
-  try {
-    const { project } = req.body;
-    
-    if (!project) {
-      return res.status(400).json({ error: "Project name is required" });
-    }
-    
-    const client = await getAzureDevOpsClient();
-    const buildApi = await client.getBuildApi();
-    const builds = await buildApi.getBuilds(project, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 10);
-    
-    res.json({
-      success: true,
-      result: {
-        content: [{
-          type: "text",
-          text: JSON.stringify(builds.map(b => ({
-            id: b.id,
-            buildNumber: b.buildNumber,
-            status: b.status,
-            result: b.result,
-            startTime: b.startTime,
-            finishTime: b.finishTime
-          })))
-        }]
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// List available tools endpoint
+// List available tools endpoint (all tools)
 app.get("/api/tools", (req, res) => {
   res.json({
     success: true,
-    tools: [
-      {
-        name: "wit_get_work_item",
-        description: "Get a single work item by ID",
-        parameters: ["id", "project?"]
-      },
-      {
-        name: "core_list_projects",
-        description: "List all projects in the organization",
-        parameters: []
-      },
-      {
-        name: "build_get_builds",
-        description: "Get builds for a project",
-        parameters: ["project"]
-      }
-    ]
+    tools: getToolsForMcp(),
   });
+});
+
+// Execute any tool by name via REST
+app.post("/api/tools/:toolName", async (req, res) => {
+  try {
+    const toolName = req.params.toolName;
+    const args = req.body || {};
+    const result = await executeToolByName(toolName, args);
+    res.json({ success: true, result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error?.message || String(error) });
+  }
 });
 
 // MCP JSON-RPC endpoint
@@ -757,99 +672,25 @@ app.post("/mcp", async (req, res) => {
       return res.json(response);
     }
 
-    // Handle tools/call request
+    // Handle tools/call request (generic dispatcher for all tools)
     if (request.method === "tools/call") {
-      const { name, arguments: args } = request.params;
-      
       try {
-        let result;
-        
-        if (name === "get_work_item") {
-          const { workItemId } = args;
-          if (!workItemId) {
-            throw new Error("workItemId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const witApi = await client.getWorkItemTrackingApi();
-          const workItem = await witApi.getWorkItem(workItemId);
-          
-          result = {
-            content: [{
-              type: "text",
-              text: `# Work Item ${workItem.id}: ${workItem.fields!["System.Title"]}\n\n` +
-                    `**Type**: ${workItem.fields!["System.WorkItemType"]}\n` +
-                    `**State**: ${workItem.fields!["System.State"]}\n` +
-                    `**Assigned To**: ${workItem.fields!["System.AssignedTo"]?.displayName || "Unassigned"}\n` +
-                    `**Created**: ${workItem.fields!["System.CreatedDate"]}`
-            }]
-          };
-        } else if (name === "list_projects") {
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const projects = await coreApi.getProjects();
-          
-          const projectList = projects.map((project: any) => {
-            return `- **${project.name}**: ${project.description || "No description"} (ID: ${project.id})`;
-          }).join('\n');
-          
-          result = {
-            content: [{
-              type: "text",
-              text: `# Projects (${projects.length})\n\n${projectList}`
-            }]
-          };
-        } else if (name === "get_project") {
-          const { projectId } = args;
-          if (!projectId) {
-            throw new Error("projectId is required");
-          }
-          
-          const client = await getAzureDevOpsClient();
-          const coreApi = await client.getCoreApi();
-          const project = await coreApi.getProject(projectId);
-          
-          if (!project) {
-            result = {
-              content: [{
-                type: "text",
-                text: `Project ${projectId} not found.`
-              }]
-            };
-          } else {
-            result = {
-              content: [{
-                type: "text",
-                text: `# Project: ${project.name}\n\n` +
-                      `**ID**: ${project.id}\n` +
-                      `**Description**: ${project.description || "No description"}\n` +
-                      `**State**: ${project.state}\n` +
-                      `**Visibility**: ${project.visibility}\n` +
-                      `**URL**: ${project.url}`
-              }]
-            };
-          }
-        } else {
-          throw new Error(`Unknown tool: ${name}`);
+        const { name, arguments: args } = request.params || {};
+        if (!name) {
+          return res.json({
+            jsonrpc: "2.0",
+            id: request.id,
+            error: { code: -32602, message: "Missing tool name" },
+          });
         }
-        
-        const response = {
-          jsonrpc: "2.0",
-          id: request.id,
-          result
-        };
-        return res.json(response);
-        
+        const result = await executeToolByName(name, args);
+        return res.json({ jsonrpc: "2.0", id: request.id, result });
       } catch (error: any) {
-        const response = {
+        return res.json({
           jsonrpc: "2.0",
           id: request.id,
-          error: {
-            code: -32000,
-            message: error.message || "Tool execution failed"
-          }
-        };
-        return res.json(response);
+          error: { code: -32000, message: error?.message || "Tool execution failed" },
+        });
       }
     }
 
@@ -882,9 +723,7 @@ app.get("/", (req, res) => {
       health: "GET /health - Health check",
       mcp: "POST /mcp - MCP JSON-RPC 2.0 endpoint",
       tools: "GET /api/tools - List available tools",
-      getWorkItem: "POST /api/tools/wit_get_work_item - Get work item by ID",
-      listProjects: "POST /api/tools/core_list_projects - List projects",
-      getBuilds: "POST /api/tools/build_get_builds - Get project builds"
+      callTool: "POST /api/tools/{toolName} - Execute tool by name"
     },
     documentation: "Azure DevOps MCP Server with both HTTP API and MCP protocol support"
   });

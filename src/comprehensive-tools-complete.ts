@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { WebApi } from "azure-devops-node-api";
+import { WorkItemExpand } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 
 // Microsoft-compatible tool definitions (optimized)
 export interface ComprehensiveTool {
@@ -3088,7 +3089,14 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
     handler: async (args, connection) => {
       try {
         const witApi = await connection.getWorkItemTrackingApi();
-        const workItem = await witApi.getWorkItem(args.workItemId, undefined, undefined, undefined, args.project);
+        // Ensure relations are included in the response
+        const workItem = await witApi.getWorkItem(
+          args.workItemId,
+          undefined,
+          undefined,
+          WorkItemExpand.Relations,
+          args.project
+        );
         
         return {
           content: [{ type: "text", text: JSON.stringify(workItem.relations || []) }]
