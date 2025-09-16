@@ -634,6 +634,14 @@ app.post("/mcp", async (req, res) => {
       });
     }
 
+    // Treat JSON-RPC notifications (no id) as fire-and-forget
+    if (request && !Object.prototype.hasOwnProperty.call(request, "id")) {
+      if (typeof request.method === "string" && request.method.startsWith("notifications/")) {
+        // No JSON-RPC response for notifications
+        return res.status(204).end();
+      }
+    }
+
     // Handle initialize request
     if (request.method === "initialize") {
       const response = {
@@ -724,6 +732,13 @@ app.post("/sse", async (req, res) => {
         id: request?.id || null,
         error: { code: -32600, message: "Invalid Request" },
       });
+    }
+
+    // Notifications: no response body
+    if (request && !Object.prototype.hasOwnProperty.call(request, "id")) {
+      if (typeof request.method === "string" && request.method.startsWith("notifications/")) {
+        return res.status(204).end();
+      }
     }
 
     if (request.method === "initialize") {
