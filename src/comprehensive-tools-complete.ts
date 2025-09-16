@@ -1826,7 +1826,6 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
     },
     handler: async (args, connection) => {
       try {
-        // This requires direct REST API call to the search service
         const orgName = connection.serverUrl.split("/")[3];
         const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/codesearchresults?api-version=7.2-preview.1`;
 
@@ -1836,31 +1835,35 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         if (args.path && args.path.length > 0) filters.Path = args.path;
         if (args.branch && args.branch.length > 0) filters.Branch = args.branch;
 
-        const requestBody = {
+        const body: any = {
           searchText: args.searchText,
           includeFacets: false,
           $skip: 0,
           $top: args.top || 5,
-          filters: Object.keys(filters).length > 0 ? filters : undefined
         };
+        if (Object.keys(filters).length > 0) body.filters = filters;
 
-        const result = {
-          message: "Code search functionality requires direct REST API implementation with proper authentication.",
-          searchText: args.searchText,
-          endpoint: url,
-          filters,
-          requestBody
-        };
+        const pat = process.env.AZURE_DEVOPS_PAT;
+        if (!pat) throw new Error("AZURE_DEVOPS_PAT not set");
+        const auth = `Basic ${Buffer.from(`:${pat}`).toString("base64")}`;
 
-        return {
-          content: [{ type: "text", text: JSON.stringify(result) }]
-        };
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": auth,
+          },
+          body: JSON.stringify(body),
+        });
+        const text = await resp.text();
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${text}`);
+        }
+
+        return { content: [{ type: "text", text }] };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-        return {
-          content: [{ type: "text", text: `Error searching code: ${errorMessage}` }],
-          isError: true
-        };
+        return { content: [{ type: "text", text: `Error searching code: ${errorMessage}` }], isError: true };
       }
     }
   },
@@ -1880,7 +1883,6 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
     },
     handler: async (args, connection) => {
       try {
-        // This requires direct REST API call to the search service
         const orgName = connection.serverUrl.split("/")[3];
         const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/wikisearchresults?api-version=7.2-preview.1`;
 
@@ -1888,22 +1890,34 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
         if (args.project && args.project.length > 0) filters.Project = args.project;
         if (args.wiki && args.wiki.length > 0) filters.Wiki = args.wiki;
 
-        const result = {
-          message: "Wiki search functionality requires direct REST API implementation with proper authentication.",
+        const body: any = {
           searchText: args.searchText,
-          endpoint: url,
-          filters
+          includeFacets: false,
+          $skip: 0,
+          $top: args.top || 10,
         };
+        if (Object.keys(filters).length > 0) body.filters = filters;
 
-        return {
-          content: [{ type: "text", text: JSON.stringify(result) }]
-        };
+        const pat = process.env.AZURE_DEVOPS_PAT;
+        if (!pat) throw new Error("AZURE_DEVOPS_PAT not set");
+        const auth = `Basic ${Buffer.from(`:${pat}`).toString("base64")}`;
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": auth,
+          },
+          body: JSON.stringify(body),
+        });
+        const text = await resp.text();
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${text}`);
+        }
+        return { content: [{ type: "text", text }] };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-        return {
-          content: [{ type: "text", text: `Error searching wiki: ${errorMessage}` }],
-          isError: true
-        };
+        return { content: [{ type: "text", text: `Error searching wiki: ${errorMessage}` }], isError: true };
       }
     }
   },
@@ -1926,33 +1940,44 @@ export const comprehensiveToolsComplete: ComprehensiveTool[] = [
     },
     handler: async (args, connection) => {
       try {
-        // This requires direct REST API call to the search service
         const orgName = connection.serverUrl.split("/")[3];
         const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/workitemsearchresults?api-version=7.2-preview.1`;
 
-        const filters: Record<string, string[]> = {};
+        const filters: Record<string, any> = {};
         if (args.project && args.project.length > 0) filters["System.TeamProject"] = args.project;
         if (args.areaPath && args.areaPath.length > 0) filters["System.AreaPath"] = args.areaPath;
         if (args.workItemType && args.workItemType.length > 0) filters["System.WorkItemType"] = args.workItemType;
         if (args.state && args.state.length > 0) filters["System.State"] = args.state;
         if (args.assignedTo && args.assignedTo.length > 0) filters["System.AssignedTo"] = args.assignedTo;
 
-        const result = {
-          message: "Work item search functionality requires direct REST API implementation with proper authentication.",
+        const body: any = {
           searchText: args.searchText,
-          endpoint: url,
-          filters
+          includeFacets: false,
+          $skip: 0,
+          $top: args.top || 10,
         };
+        if (Object.keys(filters).length > 0) body.filters = filters;
 
-        return {
-          content: [{ type: "text", text: JSON.stringify(result) }]
-        };
+        const pat = process.env.AZURE_DEVOPS_PAT;
+        if (!pat) throw new Error("AZURE_DEVOPS_PAT not set");
+        const auth = `Basic ${Buffer.from(`:${pat}`).toString("base64")}`;
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": auth,
+          },
+          body: JSON.stringify(body),
+        });
+        const text = await resp.text();
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${text}`);
+        }
+        return { content: [{ type: "text", text }] };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-        return {
-          content: [{ type: "text", text: `Error searching work items: ${errorMessage}` }],
-          isError: true
-        };
+        return { content: [{ type: "text", text: `Error searching work items: ${errorMessage}` }], isError: true };
       }
     }
   },
