@@ -640,7 +640,7 @@ app.post("/mcp", async (req, res) => {
         jsonrpc: "2.0",
         id: request.id,
         result: {
-          protocolVersion: "2024-11-05",
+          protocolVersion: (request.params && request.params.protocolVersion) || "2024-11-05",
           capabilities: {
             tools: {
               listChanged: true
@@ -713,6 +713,61 @@ app.post("/mcp", async (req, res) => {
   }
 });
 
+// Compatibility alias: some MCP proxies may POST to /sse with JSON-RPC
+// Treat it the same as /mcp for initialize/tools/list/tools/call
+app.post("/sse", async (req, res) => {
+  try {
+    const request = req.body;
+    if (!request?.jsonrpc) {
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        id: request?.id || null,
+        error: { code: -32600, message: "Invalid Request" },
+      });
+    }
+
+    if (request.method === "initialize") {
+      return res.json({
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          protocolVersion: (request.params && request.params.protocolVersion) || "2024-11-05",
+          capabilities: {
+            tools: { listChanged: true },
+            transport: { name: "streamable-https", supported: true },
+          },
+          serverInfo: {
+            name: "Azure DevOps MCP Server (PAT)",
+            version: packageVersion,
+            transport: "streamable-https",
+          },
+        },
+      });
+    }
+
+    if (request.method === "tools/list") {
+      return res.json({ jsonrpc: "2.0", id: request.id, result: { tools: getToolsForMcp() } });
+    }
+
+    if (request.method === "tools/call") {
+      try {
+        const { name, arguments: args } = request.params || {};
+        if (!name) {
+          return res.json({ jsonrpc: "2.0", id: request.id, error: { code: -32602, message: "Missing tool name" } });
+        }
+        const result = await executeToolByName(name, args);
+        return res.json({ jsonrpc: "2.0", id: request.id, result });
+      } catch (error: any) {
+        return res.json({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: error?.message || "Tool execution failed" } });
+      }
+    }
+
+    return res.json({ jsonrpc: "2.0", id: request.id, error: { code: -32601, message: "Method not found" } });
+  } catch (error: any) {
+    return res.status(500).json({ jsonrpc: "2.0", id: req.body?.id || null, error: { code: -32603, message: "Internal error" } });
+  }
+});
+
 // Root endpoint with API documentation
 app.get("/", (req, res) => {
   res.json({
@@ -722,6 +777,7 @@ app.get("/", (req, res) => {
     endpoints: {
       health: "GET /health - Health check",
       mcp: "POST /mcp - MCP JSON-RPC 2.0 endpoint",
+      mcpAlias: "POST /sse - JSON-RPC alias for some MCP proxies",
       tools: "GET /api/tools - List available tools",
       callTool: "POST /api/tools/{toolName} - Execute tool by name"
     },
