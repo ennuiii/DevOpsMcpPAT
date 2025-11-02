@@ -4,6 +4,10 @@ A Model Context Protocol (MCP) server for Azure DevOps that uses Personal Access
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
+<a href="https://glama.ai/mcp/servers/@ennuiii/DevOpsMcpPAT">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@ennuiii/DevOpsMcpPAT/badge" alt="Azure DevOps Server with PAT Authentication MCP server" />
+</a>
+
 ## ✨ Features
 
 - **🔑 PAT Authentication**: Uses Personal Access Tokens instead of Azure CLI
