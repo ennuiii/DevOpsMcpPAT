@@ -1,7 +1,7 @@
 {
   "name": "azure-devops-mcp-pat",
   "version": "1.0.0",
-  "description": "Azure DevOps MCP server with PAT authentication and HTTP API for web deployment",
+  "description": "Official Azure DevOps MCP Server deployed on Render via Supergateway (stdio→HTTP bridge)",
   "license": "MIT",
   "author": "ennuiii",
   "homepage": "https://github.com/ennuiii/DevOpsMcpPAT",
@@ -21,44 +21,10 @@
     "Dockerfile"
   ],
   "scripts": {
-    "preinstall": "npm config set registry https://registry.npmjs.org/",
-    "prebuild": "node -p \"'export const packageVersion = ' + JSON.stringify(require('./package.json').version) + ';\\n'\" > src/version.ts",
-    "build": "tsc -p tsconfig.prod.json",
-    "start": "node dist/server-web-simple.js",
-    "dev": "npm run build && npm start",
-    "watch": "tsc --watch",
-    "clean": "shx rm -rf dist",
-    "test": "jest",
-    "eslint": "eslint",
-    "eslint-fix": "eslint --fix",
-    "format": "prettier --write .",
-    "format-check": "prettier --check ."
+    "start": "npx -y supergateway --stdio \"npx -y @azure-devops/mcp ${AZURE_DEVOPS_ORG} --auth-type env\" --port ${PORT:-8000} --cors --healthEndpoint /health"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.17.0",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^22",
-    "@types/yargs": "^17.0.32",
-    "azure-devops-extension-api": "^4.252.0",
-    "azure-devops-extension-sdk": "^4.0.2",
-    "azure-devops-node-api": "^15.1.0",
-    "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "yargs": "^18.0.0",
-    "zod": "^3.25.63",
-    "zod-to-json-schema": "^3.24.5"
-  },
-  "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "eslint-config-prettier": "10.1.8",
-    "eslint-plugin-header": "^3.1.1",
-    "jest": "^30.0.2",
-    "jest-extended": "^6.0.0",
-    "prettier": "3.6.2",
-    "shx": "^0.4.0",
-    "ts-jest": "^29.4.0",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.32.1"
+    "supergateway": "latest",
+    "@azure-devops/mcp": "latest"
   }
 }
