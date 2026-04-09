@@ -12,5 +12,5 @@ services:
         value: production
       - key: AZURE_DEVOPS_ORG
         value: GOpus
-      - key: ADO_MCP_AUTH_TOKEN
+      - key: AZURE_DEVOPS_PAT
         sync: false
