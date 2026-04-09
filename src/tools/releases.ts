@@ -57,29 +57,37 @@ function configureReleaseTools(server: McpServer, tokenProvider: () => Promise<A
       isDeleted,
       searchTextContainsFolderName,
     }) => {
-      const connection = await connectionProvider();
-      const releaseApi = await connection.getReleaseApi();
-      const releaseDefinitions = await releaseApi.getReleaseDefinitions(
-        project,
-        searchText,
-        safeEnumConvert(ReleaseDefinitionExpands, expand),
-        artifactType,
-        artifactSourceId,
-        top,
-        continuationToken,
-        safeEnumConvert(ReleaseDefinitionQueryOrder, queryOrder),
-        path,
-        isExactNameMatch,
-        tagFilter,
-        propertyFilters,
-        definitionIdFilter,
-        isDeleted,
-        searchTextContainsFolderName
-      );
+      try {
+        const connection = await connectionProvider();
+        const releaseApi = await connection.getReleaseApi();
+        const releaseDefinitions = await releaseApi.getReleaseDefinitions(
+          project,
+          searchText,
+          safeEnumConvert(ReleaseDefinitionExpands, expand),
+          artifactType,
+          artifactSourceId,
+          top,
+          continuationToken,
+          safeEnumConvert(ReleaseDefinitionQueryOrder, queryOrder),
+          path,
+          isExactNameMatch,
+          tagFilter,
+          propertyFilters,
+          definitionIdFilter,
+          isDeleted,
+          searchTextContainsFolderName
+        );
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(releaseDefinitions, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(releaseDefinitions, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving release definitions: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -158,36 +166,44 @@ function configureReleaseTools(server: McpServer, tokenProvider: () => Promise<A
       releaseIdFilter,
       path,
     }) => {
-      const connection = await connectionProvider();
-      const releaseApi = await connection.getReleaseApi();
-      const releases = await releaseApi.getReleases(
-        project,
-        definitionId,
-        definitionEnvironmentId,
-        searchText,
-        createdBy,
-        safeEnumConvert(ReleaseStatus, statusFilter),
-        environmentStatusFilter,
-        minCreatedTime,
-        maxCreatedTime,
-        safeEnumConvert(ReleaseQueryOrder, queryOrder),
-        top,
-        continuationToken,
-        safeEnumConvert(ReleaseExpands, expand),
-        artifactTypeId,
-        sourceId,
-        artifactVersionId,
-        sourceBranchFilter,
-        isDeleted,
-        tagFilter,
-        propertyFilters,
-        releaseIdFilter,
-        path
-      );
+      try {
+        const connection = await connectionProvider();
+        const releaseApi = await connection.getReleaseApi();
+        const releases = await releaseApi.getReleases(
+          project,
+          definitionId,
+          definitionEnvironmentId,
+          searchText,
+          createdBy,
+          safeEnumConvert(ReleaseStatus, statusFilter),
+          environmentStatusFilter,
+          minCreatedTime,
+          maxCreatedTime,
+          safeEnumConvert(ReleaseQueryOrder, queryOrder),
+          top,
+          continuationToken,
+          safeEnumConvert(ReleaseExpands, expand),
+          artifactTypeId,
+          sourceId,
+          artifactVersionId,
+          sourceBranchFilter,
+          isDeleted,
+          tagFilter,
+          propertyFilters,
+          releaseIdFilter,
+          path
+        );
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(releases, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(releases, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving releases: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 }

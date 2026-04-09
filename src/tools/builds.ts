@@ -8,6 +8,9 @@ import { WebApi } from "azure-devops-node-api";
 import { BuildQueryOrder, DefinitionQueryOrder } from "azure-devops-node-api/interfaces/BuildInterfaces.js";
 import { z } from "zod";
 import { StageUpdateType } from "azure-devops-node-api/interfaces/BuildInterfaces.js";
+import { ConfigurationType, RepositoryType } from "azure-devops-node-api/interfaces/PipelinesInterfaces.js";
+import * as fs from "fs";
+import * as path from "path";
 
 const BUILD_TOOLS = {
   get_definitions: "build_get_definitions",
@@ -19,6 +22,11 @@ const BUILD_TOOLS = {
   run_build: "build_run_build",
   get_status: "build_get_status",
   update_build_stage: "build_update_build_stage",
+  pipelines_get_run: "pipelines_get_run",
+  pipelines_list_runs: "pipelines_list_runs",
+  pipelines_list_artifacts: "pipelines_list_artifacts",
+  pipelines_download_artifact: "pipelines_download_artifact",
+  pipelines_create_pipeline: "pipelines_create_pipeline",
 };
 
 function configureBuildTools(server: McpServer, tokenProvider: () => Promise<AccessToken>, connectionProvider: () => Promise<WebApi>, userAgentProvider: () => string) {
@@ -66,31 +74,36 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       processType,
       yamlFilename,
     }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const buildDefinitions = await buildApi.getDefinitions(
-        project,
-        name,
-        repositoryId,
-        repositoryType,
-        safeEnumConvert(DefinitionQueryOrder, queryOrder),
-        top,
-        continuationToken,
-        minMetricsTime,
-        definitionIds,
-        path,
-        builtAfter,
-        notBuiltAfter,
-        includeAllProperties,
-        includeLatestBuilds,
-        taskIdFilter,
-        processType,
-        yamlFilename
-      );
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const buildDefinitions = await buildApi.getDefinitions(
+          project,
+          name,
+          repositoryId,
+          repositoryType,
+          safeEnumConvert(DefinitionQueryOrder, queryOrder),
+          top,
+          continuationToken,
+          minMetricsTime,
+          definitionIds,
+          path,
+          builtAfter,
+          notBuiltAfter,
+          includeAllProperties,
+          includeLatestBuilds,
+          taskIdFilter,
+          processType,
+          yamlFilename
+        );
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(buildDefinitions, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(buildDefinitions, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 
@@ -102,13 +115,18 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       definitionId: z.number().describe("ID of the build definition to get revisions for"),
     },
     async ({ project, definitionId }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const revisions = await buildApi.getDefinitionRevisions(project, definitionId);
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const revisions = await buildApi.getDefinitionRevisions(project, definitionId);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(revisions, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(revisions, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 
@@ -165,35 +183,40 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       repositoryId,
       repositoryType,
     }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const builds = await buildApi.getBuilds(
-        project,
-        definitions,
-        queues,
-        buildNumber,
-        minTime,
-        maxTime,
-        requestedFor,
-        reasonFilter,
-        statusFilter,
-        resultFilter,
-        tagFilters,
-        properties,
-        top,
-        continuationToken,
-        maxBuildsPerDefinition,
-        deletedFilter,
-        safeEnumConvert(BuildQueryOrder, queryOrder),
-        branchName,
-        buildIds,
-        repositoryId,
-        repositoryType
-      );
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const builds = await buildApi.getBuilds(
+          project,
+          definitions,
+          queues,
+          buildNumber,
+          minTime,
+          maxTime,
+          requestedFor,
+          reasonFilter,
+          statusFilter,
+          resultFilter,
+          tagFilters,
+          properties,
+          top,
+          continuationToken,
+          maxBuildsPerDefinition,
+          deletedFilter,
+          safeEnumConvert(BuildQueryOrder, queryOrder),
+          branchName,
+          buildIds,
+          repositoryId,
+          repositoryType
+        );
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(builds, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(builds, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 
@@ -205,13 +228,18 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       buildId: z.number().describe("ID of the build to get the log for"),
     },
     async ({ project, buildId }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const logs = await buildApi.getBuildLogs(project, buildId);
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const logs = await buildApi.getBuildLogs(project, buildId);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(logs, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(logs, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 
@@ -226,13 +254,18 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       endLine: z.number().optional().describe("Ending line number for the log content, defaults to the end of the log"),
     },
     async ({ project, buildId, logId, startLine, endLine }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const logLines = await buildApi.getBuildLogLines(project, buildId, logId, startLine, endLine);
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const logLines = await buildApi.getBuildLogLines(project, buildId, logId, startLine, endLine);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(logLines, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(logLines, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 
@@ -247,13 +280,18 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       includeSourceChange: z.boolean().optional().describe("Whether to include source changes in the results, defaults to false"),
     },
     async ({ project, buildId, continuationToken, top, includeSourceChange }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const changes = await buildApi.getBuildChanges(project, buildId, continuationToken, top, includeSourceChange);
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const changes = await buildApi.getBuildChanges(project, buildId, continuationToken, top, includeSourceChange);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(changes, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(changes, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 
@@ -267,32 +305,37 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       parameters: z.record(z.string(), z.string()).optional().describe("Custom build parameters as key-value pairs"),
     },
     async ({ project, definitionId, sourceBranch, parameters }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const pipelinesApi = await connection.getPipelinesApi();
-      const definition = await buildApi.getDefinition(project, definitionId);
-      const runRequest = {
-        resources: {
-          repositories: {
-            self: {
-              refName: sourceBranch || definition.repository?.defaultBranch || "refs/heads/main",
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const pipelinesApi = await connection.getPipelinesApi();
+        const definition = await buildApi.getDefinition(project, definitionId);
+        const runRequest = {
+          resources: {
+            repositories: {
+              self: {
+                refName: sourceBranch || definition.repository?.defaultBranch || "refs/heads/main",
+              },
             },
           },
-        },
-        templateParameters: parameters,
-      };
+          templateParameters: parameters,
+        };
 
-      const pipelineRun = await pipelinesApi.runPipeline(runRequest, project, definitionId);
-      const queuedBuild = { id: pipelineRun.id };
-      const buildId = queuedBuild.id;
-      if (buildId === undefined) {
-        throw new Error("Failed to get build ID from pipeline run");
+        const pipelineRun = await pipelinesApi.runPipeline(runRequest, project, definitionId);
+        const queuedBuild = { id: pipelineRun.id };
+        const buildId = queuedBuild.id;
+        if (buildId === undefined) {
+          throw new Error("Failed to get build ID from pipeline run");
+        }
+
+        const buildReport = await buildApi.getBuildReport(project, buildId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(buildReport, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
       }
-
-      const buildReport = await buildApi.getBuildReport(project, buildId);
-      return {
-        content: [{ type: "text", text: JSON.stringify(buildReport, null, 2) }],
-      };
     }
   );
 
@@ -304,13 +347,18 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       buildId: z.number().describe("ID of the build to get the status for"),
     },
     async ({ project, buildId }) => {
-      const connection = await connectionProvider();
-      const buildApi = await connection.getBuildApi();
-      const build = await buildApi.getBuildReport(project, buildId);
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const build = await buildApi.getBuildReport(project, buildId);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(build, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(build, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 
@@ -325,36 +373,222 @@ function configureBuildTools(server: McpServer, tokenProvider: () => Promise<Acc
       forceRetryAllJobs: z.boolean().default(false).describe("Whether to force retry all jobs in the stage."),
     },
     async ({ project, buildId, stageName, status, forceRetryAllJobs }) => {
-      const connection = await connectionProvider();
-      const orgUrl = connection.serverUrl;
-      const endpoint = `${orgUrl}/${project}/_apis/build/builds/${buildId}/stages/${stageName}?api-version=${apiVersion}`;
-      const token = await tokenProvider();
+      try {
+        const connection = await connectionProvider();
+        const orgUrl = connection.serverUrl;
+        const endpoint = `${orgUrl}/${project}/_apis/build/builds/${buildId}/stages/${stageName}?api-version=${apiVersion}`;
+        const token = await tokenProvider();
 
-      const body = {
-        forceRetryAllJobs: forceRetryAllJobs,
-        state: safeEnumConvert(StageUpdateType, status),
-      };
+        const body = {
+          forceRetryAllJobs: forceRetryAllJobs,
+          state: safeEnumConvert(StageUpdateType, status),
+        };
 
-      const response = await fetch(endpoint, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token.token}`,
-          "User-Agent": userAgentProvider(),
-        },
-        body: JSON.stringify(body),
-      });
+        const response = await fetch(endpoint, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token.token}`,
+            "User-Agent": userAgentProvider(),
+          },
+          body: JSON.stringify(body),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to update build stage: ${response.status} ${errorText}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to update build stage: ${response.status} ${errorText}`);
+        }
+
+        const updatedBuild = await response.text();
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(updatedBuild, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
       }
+    }
+  );
 
-      const updatedBuild = await response.text();
+  server.tool(
+    BUILD_TOOLS.pipelines_get_run,
+    "Retrieves a specific pipeline run by pipeline ID and run ID.",
+    {
+      project: z.string().describe("Project ID or name"),
+      pipelineId: z.number().describe("ID of the pipeline"),
+      runId: z.number().describe("ID of the run to retrieve"),
+    },
+    async ({ project, pipelineId, runId }) => {
+      try {
+        const connection = await connectionProvider();
+        const pipelinesApi = await connection.getPipelinesApi();
+        const run = await pipelinesApi.getRun(project, pipelineId, runId);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(updatedBuild, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(run, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    BUILD_TOOLS.pipelines_list_runs,
+    "Lists all runs for a specific pipeline.",
+    {
+      project: z.string().describe("Project ID or name"),
+      pipelineId: z.number().describe("ID of the pipeline to list runs for"),
+    },
+    async ({ project, pipelineId }) => {
+      try {
+        const connection = await connectionProvider();
+        const pipelinesApi = await connection.getPipelinesApi();
+        const runs = await pipelinesApi.listRuns(project, pipelineId);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(runs, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    BUILD_TOOLS.pipelines_list_artifacts,
+    "Lists all artifacts for a specific build.",
+    {
+      project: z.string().describe("Project ID or name"),
+      buildId: z.number().describe("ID of the build to list artifacts for"),
+    },
+    async ({ project, buildId }) => {
+      try {
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const artifacts = await buildApi.getArtifacts(project, buildId);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(artifacts, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    BUILD_TOOLS.pipelines_download_artifact,
+    "Downloads a specific artifact from a build as a zip file.",
+    {
+      project: z.string().describe("Project ID or name"),
+      buildId: z.number().describe("ID of the build"),
+      artifactName: z.string().describe("Name of the artifact to download"),
+      destinationPath: z.string().optional().describe("Local file path to save the artifact zip. If not provided, the artifact content is returned as base64."),
+    },
+    async ({ project, buildId, artifactName, destinationPath }) => {
+      try {
+        if (artifactName.includes("..") || artifactName.includes("//")) {
+          throw new Error("Invalid artifactName: path traversal is not allowed");
+        }
+        if (destinationPath && (destinationPath.includes("..") || destinationPath.includes("//"))) {
+          throw new Error("Invalid destinationPath: path traversal is not allowed");
+        }
+
+        const connection = await connectionProvider();
+        const buildApi = await connection.getBuildApi();
+        const stream = await buildApi.getArtifactContentZip(project, buildId, artifactName);
+
+        if (destinationPath) {
+          const resolvedPath = path.resolve(destinationPath);
+          const dir = path.dirname(resolvedPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          const writeStream = fs.createWriteStream(resolvedPath);
+          await new Promise<void>((resolve, reject) => {
+            stream.pipe(writeStream);
+            stream.on("error", reject);
+            writeStream.on("finish", resolve);
+            writeStream.on("error", reject);
+          });
+
+          return {
+            content: [{ type: "text", text: JSON.stringify({ message: `Artifact '${artifactName}' saved to ${resolvedPath}` }, null, 2) }],
+          };
+        } else {
+          const chunks: Buffer[] = [];
+          await new Promise<void>((resolve, reject) => {
+            stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+            stream.on("end", resolve);
+            stream.on("error", reject);
+          });
+          const buffer = Buffer.concat(chunks);
+          const base64Content = buffer.toString("base64");
+
+          return {
+            content: [{ type: "text", text: JSON.stringify({ artifactName, encoding: "base64", size: buffer.length, content: base64Content }, null, 2) }],
+          };
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    BUILD_TOOLS.pipelines_create_pipeline,
+    "Creates a new pipeline definition.",
+    {
+      project: z.string().describe("Project ID or name"),
+      name: z.string().describe("Name of the pipeline"),
+      folder: z.string().optional().default("\\").describe("Folder path for the pipeline, defaults to root folder"),
+      yamlPath: z.string().describe("Path to the YAML file for the pipeline configuration"),
+      repositoryType: z.enum(getEnumKeys(RepositoryType) as [string, ...string[]]).describe("Type of the repository"),
+      repositoryName: z.string().describe("Name of the repository"),
+      repositoryId: z.string().optional().describe("ID of the repository"),
+      repositoryConnectionId: z.string().optional().describe("Service connection ID for the repository"),
+    },
+    async ({ project, name, folder, yamlPath, repositoryType, repositoryName, repositoryId, repositoryConnectionId }) => {
+      try {
+        const connection = await connectionProvider();
+        const pipelinesApi = await connection.getPipelinesApi();
+
+        const repository: Record<string, unknown> = {
+          type: safeEnumConvert(RepositoryType, repositoryType),
+          name: repositoryName,
+        };
+        if (repositoryId) {
+          repository.id = repositoryId;
+        }
+        if (repositoryConnectionId) {
+          repository.connection = { id: repositoryConnectionId };
+        }
+
+        const params = {
+          name,
+          folder,
+          configuration: {
+            type: ConfigurationType.Yaml,
+            path: yamlPath,
+            repository,
+          },
+        };
+
+        const pipeline = await pipelinesApi.createPipeline(params, project);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(pipeline, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return { content: [{ type: "text", text: `Error: ${errorMessage}` }], isError: true };
+      }
     }
   );
 }

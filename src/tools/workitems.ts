@@ -29,6 +29,8 @@ const WORKITEM_TOOLS = {
   work_items_link: "wit_work_items_link",
   work_item_unlink: "wit_work_item_unlink",
   add_artifact_link: "wit_add_artifact_link",
+  list_work_item_revisions: "wit_list_work_item_revisions",
+  update_work_item_comment: "wit_update_work_item_comment",
 };
 
 function getLinkTypeFromName(name: string) {
@@ -71,14 +73,22 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       team: z.string().describe("The name or ID of the Azure DevOps team."),
     },
     async ({ project, team }) => {
-      const connection = await connectionProvider();
-      const workApi = await connection.getWorkApi();
-      const teamContext = { project, team };
-      const backlogs = await workApi.getBacklogs(teamContext);
+      try {
+        const connection = await connectionProvider();
+        const workApi = await connection.getWorkApi();
+        const teamContext = { project, team };
+        const backlogs = await workApi.getBacklogs(teamContext);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(backlogs, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(backlogs, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing backlogs: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -91,15 +101,23 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       backlogId: z.string().describe("The ID of the backlog category to retrieve work items from."),
     },
     async ({ project, team, backlogId }) => {
-      const connection = await connectionProvider();
-      const workApi = await connection.getWorkApi();
-      const teamContext = { project, team };
+      try {
+        const connection = await connectionProvider();
+        const workApi = await connection.getWorkApi();
+        const teamContext = { project, team };
 
-      const workItems = await workApi.getBacklogLevelWorkItems(teamContext, backlogId);
+        const workItems = await workApi.getBacklogLevelWorkItems(teamContext, backlogId);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing backlog work items: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -113,14 +131,22 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       includeCompleted: z.boolean().default(false).describe("Whether to include completed work items. Defaults to false."),
     },
     async ({ project, type, top, includeCompleted }) => {
-      const connection = await connectionProvider();
-      const workApi = await connection.getWorkApi();
+      try {
+        const connection = await connectionProvider();
+        const workApi = await connection.getWorkApi();
 
-      const workItems = await workApi.getPredefinedQueryResults(project, type, top, includeCompleted);
+        const workItems = await workApi.getPredefinedQueryResults(project, type, top, includeCompleted);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving my work items: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -133,46 +159,54 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       fields: z.array(z.string()).optional().describe("Optional list of fields to include in the response. If not provided, a hardcoded default set of fields will be used."),
     },
     async ({ project, ids, fields }) => {
-      const connection = await connectionProvider();
-      const workItemApi = await connection.getWorkItemTrackingApi();
-      const defaultFields = ["System.Id", "System.WorkItemType", "System.Title", "System.State", "System.Parent", "System.Tags", "Microsoft.VSTS.Common.StackRank", "System.AssignedTo"];
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+        const defaultFields = ["System.Id", "System.WorkItemType", "System.Title", "System.State", "System.Parent", "System.Tags", "Microsoft.VSTS.Common.StackRank", "System.AssignedTo"];
 
-      // If no fields are provided, use the default set of fields
-      const fieldsToUse = !fields || fields.length === 0 ? defaultFields : fields;
+        // If no fields are provided, use the default set of fields
+        const fieldsToUse = !fields || fields.length === 0 ? defaultFields : fields;
 
-      const workitems = await workItemApi.getWorkItemsBatch({ ids, fields: fieldsToUse }, project);
+        const workitems = await workItemApi.getWorkItemsBatch({ ids, fields: fieldsToUse }, project);
 
-      // List of identity fields that need to be transformed from objects to formatted strings
-      const identityFields = [
-        "System.AssignedTo",
-        "System.CreatedBy",
-        "System.ChangedBy",
-        "System.AuthorizedAs",
-        "Microsoft.VSTS.Common.ActivatedBy",
-        "Microsoft.VSTS.Common.ResolvedBy",
-        "Microsoft.VSTS.Common.ClosedBy",
-      ];
+        // List of identity fields that need to be transformed from objects to formatted strings
+        const identityFields = [
+          "System.AssignedTo",
+          "System.CreatedBy",
+          "System.ChangedBy",
+          "System.AuthorizedAs",
+          "Microsoft.VSTS.Common.ActivatedBy",
+          "Microsoft.VSTS.Common.ResolvedBy",
+          "Microsoft.VSTS.Common.ClosedBy",
+        ];
 
-      // Format identity fields to include displayName and uniqueName
-      // Removing the identity object as the response. It's too much and not needed
-      if (workitems && Array.isArray(workitems)) {
-        workitems.forEach((item) => {
-          if (item.fields) {
-            identityFields.forEach((fieldName) => {
-              if (item.fields && item.fields[fieldName] && typeof item.fields[fieldName] === "object") {
-                const identityField = item.fields[fieldName];
-                const name = identityField.displayName || "";
-                const email = identityField.uniqueName || "";
-                item.fields[fieldName] = `${name} <${email}>`.trim();
-              }
-            });
-          }
-        });
+        // Format identity fields to include displayName and uniqueName
+        // Removing the identity object as the response. It's too much and not needed
+        if (workitems && Array.isArray(workitems)) {
+          workitems.forEach((item) => {
+            if (item.fields) {
+              identityFields.forEach((fieldName) => {
+                if (item.fields && item.fields[fieldName] && typeof item.fields[fieldName] === "object") {
+                  const identityField = item.fields[fieldName];
+                  const name = identityField.displayName || "";
+                  const email = identityField.uniqueName || "";
+                  item.fields[fieldName] = `${name} <${email}>`.trim();
+                }
+              });
+            }
+          });
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(workitems, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving work items batch: ${errorMessage}` }],
+          isError: true,
+        };
       }
-
-      return {
-        content: [{ type: "text", text: JSON.stringify(workitems, null, 2) }],
-      };
     }
   );
 
@@ -191,12 +225,20 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
         .describe("Expand options include 'all', 'fields', 'links', 'none', and 'relations'. Relations can be used to get child workitems. Defaults to 'none'."),
     },
     async ({ id, project, fields, asOf, expand }) => {
-      const connection = await connectionProvider();
-      const workItemApi = await connection.getWorkItemTrackingApi();
-      const workItem = await workItemApi.getWorkItem(id, fields, asOf, expand as unknown as WorkItemExpand, project);
-      return {
-        content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }],
-      };
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+        const workItem = await workItemApi.getWorkItem(id, fields, asOf, expand as unknown as WorkItemExpand, project);
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItem, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving work item: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -209,13 +251,21 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       top: z.number().default(50).describe("Optional number of comments to retrieve. Defaults to all comments."),
     },
     async ({ project, workItemId, top }) => {
-      const connection = await connectionProvider();
-      const workItemApi = await connection.getWorkItemTrackingApi();
-      const comments = await workItemApi.getComments(project, workItemId, top);
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+        const comments = await workItemApi.getComments(project, workItemId, top);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(comments, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(comments, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing work item comments: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -229,35 +279,43 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       format: z.enum(["markdown", "html"]).optional().default("html"),
     },
     async ({ project, workItemId, comment, format }) => {
-      const connection = await connectionProvider();
+      try {
+        const connection = await connectionProvider();
 
-      const orgUrl = connection.serverUrl;
-      const accessToken = await tokenProvider();
+        const orgUrl = connection.serverUrl;
+        const accessToken = await tokenProvider();
 
-      const body = {
-        text: comment,
-      };
+        const body = {
+          text: comment,
+        };
 
-      const formatParameter = format === "markdown" ? 0 : 1;
-      const response = await fetch(`${orgUrl}/${project}/_apis/wit/workItems/${workItemId}/comments?format=${formatParameter}&api-version=${markdownCommentsApiVersion}`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${accessToken.token}`,
-          "Content-Type": "application/json",
-          "User-Agent": userAgentProvider(),
-        },
-        body: JSON.stringify(body),
-      });
+        const formatParameter = format === "markdown" ? 0 : 1;
+        const response = await fetch(`${orgUrl}/${project}/_apis/wit/workItems/${workItemId}/comments?format=${formatParameter}&api-version=${markdownCommentsApiVersion}`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken.token}`,
+            "Content-Type": "application/json",
+            "User-Agent": userAgentProvider(),
+          },
+          body: JSON.stringify(body),
+        });
 
-      if (!response.ok) {
-        throw new Error(`Failed to add a work item comment: ${response.statusText}}`);
+        if (!response.ok) {
+          throw new Error(`Failed to add a work item comment: ${response.statusText}}`);
+        }
+
+        const comments = await response.text();
+
+        return {
+          content: [{ type: "text", text: comments }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error adding work item comment: ${errorMessage}` }],
+          isError: true,
+        };
       }
-
-      const comments = await response.text();
-
-      return {
-        content: [{ type: "text", text: comments }],
-      };
     }
   );
 
@@ -472,15 +530,23 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       iterationId: z.string().describe("The ID of the iteration to retrieve work items for."),
     },
     async ({ project, team, iterationId }) => {
-      const connection = await connectionProvider();
-      const workApi = await connection.getWorkApi();
+      try {
+        const connection = await connectionProvider();
+        const workApi = await connection.getWorkApi();
 
-      //get the work items for the current iteration
-      const workItems = await workApi.getIterationWorkItems({ project, team }, iterationId);
+        //get the work items for the current iteration
+        const workItems = await workApi.getIterationWorkItems({ project, team }, iterationId);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving work items for iteration: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -505,20 +571,28 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
         .describe("An array of field updates to apply to the work item."),
     },
     async ({ id, updates }) => {
-      const connection = await connectionProvider();
-      const workItemApi = await connection.getWorkItemTrackingApi();
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
 
-      // Convert operation names to lowercase for API
-      const apiUpdates = updates.map((update) => ({
-        ...update,
-        op: update.op,
-      }));
+        // Convert operation names to lowercase for API
+        const apiUpdates = updates.map((update) => ({
+          ...update,
+          op: update.op,
+        }));
 
-      const updatedWorkItem = await workItemApi.updateWorkItem(null, apiUpdates, id);
+        const updatedWorkItem = await workItemApi.updateWorkItem(null, apiUpdates, id);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(updatedWorkItem, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(updatedWorkItem, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error updating work item: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -530,14 +604,22 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       workItemType: z.string().describe("The name of the work item type to retrieve."),
     },
     async ({ project, workItemType }) => {
-      const connection = await connectionProvider();
-      const workItemApi = await connection.getWorkItemTrackingApi();
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
 
-      const workItemTypeInfo = await workItemApi.getWorkItemType(project, workItemType);
+        const workItemTypeInfo = await workItemApi.getWorkItemType(project, workItemType);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(workItemTypeInfo, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(workItemTypeInfo, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving work item type: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -616,14 +698,22 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       useIsoDateFormat: z.boolean().default(false).describe("Whether to use ISO date format in the response. Defaults to false."),
     },
     async ({ project, query, expand, depth, includeDeleted, useIsoDateFormat }) => {
-      const connection = await connectionProvider();
-      const workItemApi = await connection.getWorkItemTrackingApi();
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
 
-      const queryDetails = await workItemApi.getQuery(project, query, safeEnumConvert(QueryExpand, expand), depth, includeDeleted, useIsoDateFormat);
+        const queryDetails = await workItemApi.getQuery(project, query, safeEnumConvert(QueryExpand, expand), depth, includeDeleted, useIsoDateFormat);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(queryDetails, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(queryDetails, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving query: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -638,14 +728,22 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
       top: z.number().default(50).describe("The maximum number of results to return. Defaults to 50."),
     },
     async ({ id, project, team, timePrecision, top }) => {
-      const connection = await connectionProvider();
-      const workItemApi = await connection.getWorkItemTrackingApi();
-      const teamContext = { project, team };
-      const queryResult = await workItemApi.queryById(id, teamContext, timePrecision, top);
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+        const teamContext = { project, team };
+        const queryResult = await workItemApi.queryById(id, teamContext, timePrecision, top);
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(queryResult, null, 2) }],
-      };
+        return {
+          content: [{ type: "text", text: JSON.stringify(queryResult, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error retrieving query results: ${errorMessage}` }],
+          isError: true,
+        };
+      }
     }
   );
 
@@ -666,61 +764,69 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
         .describe("An array of updates to apply to work items. Each update should include the operation (op), work item ID (id), field path (path), and new value (value)."),
     },
     async ({ updates }) => {
-      const connection = await connectionProvider();
-      const orgUrl = connection.serverUrl;
-      const accessToken = await tokenProvider();
+      try {
+        const connection = await connectionProvider();
+        const orgUrl = connection.serverUrl;
+        const accessToken = await tokenProvider();
 
-      // Extract unique IDs from the updates array
-      const uniqueIds = Array.from(new Set(updates.map((update) => update.id)));
+        // Extract unique IDs from the updates array
+        const uniqueIds = Array.from(new Set(updates.map((update) => update.id)));
 
-      const body = uniqueIds.map((id) => {
-        const workItemUpdates = updates.filter((update) => update.id === id);
-        const operations = workItemUpdates.map(({ op, path, value }) => ({
-          op: op,
-          path: path,
-          value: value,
-        }));
+        const body = uniqueIds.map((id) => {
+          const workItemUpdates = updates.filter((update) => update.id === id);
+          const operations = workItemUpdates.map(({ op, path, value }) => ({
+            op: op,
+            path: path,
+            value: value,
+          }));
 
-        // Add format operations for Markdown fields
-        workItemUpdates.forEach(({ path, value, format }) => {
-          if (format === "Markdown" && value && value.length > 50) {
-            operations.push({
-              op: "Add",
-              path: `/multilineFieldsFormat${path.replace("/fields", "")}`,
-              value: "Markdown",
-            });
-          }
+          // Add format operations for Markdown fields
+          workItemUpdates.forEach(({ path, value, format }) => {
+            if (format === "Markdown" && value && value.length > 50) {
+              operations.push({
+                op: "Add",
+                path: `/multilineFieldsFormat${path.replace("/fields", "")}`,
+                value: "Markdown",
+              });
+            }
+          });
+
+          return {
+            method: "PATCH",
+            uri: `/_apis/wit/workitems/${id}?api-version=${batchApiVersion}`,
+            headers: {
+              "Content-Type": "application/json-patch+json",
+            },
+            body: operations,
+          };
         });
 
-        return {
+        const response = await fetch(`${orgUrl}/_apis/wit/$batch?api-version=${batchApiVersion}`, {
           method: "PATCH",
-          uri: `/_apis/wit/workitems/${id}?api-version=${batchApiVersion}`,
           headers: {
-            "Content-Type": "application/json-patch+json",
+            "Authorization": `Bearer ${accessToken.token}`,
+            "Content-Type": "application/json",
+            "User-Agent": userAgentProvider(),
           },
-          body: operations,
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update work items in batch: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
-      });
-
-      const response = await fetch(`${orgUrl}/_apis/wit/$batch?api-version=${batchApiVersion}`, {
-        method: "PATCH",
-        headers: {
-          "Authorization": `Bearer ${accessToken.token}`,
-          "Content-Type": "application/json",
-          "User-Agent": userAgentProvider(),
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to update work items in batch: ${response.statusText}`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error updating work items in batch: ${errorMessage}` }],
+          isError: true,
+        };
       }
-
-      const result = await response.json();
-
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
     }
   );
 
@@ -746,53 +852,61 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
         .describe(""),
     },
     async ({ project, updates }) => {
-      const connection = await connectionProvider();
-      const orgUrl = connection.serverUrl;
-      const accessToken = await tokenProvider();
+      try {
+        const connection = await connectionProvider();
+        const orgUrl = connection.serverUrl;
+        const accessToken = await tokenProvider();
 
-      // Extract unique IDs from the updates array
-      const uniqueIds = Array.from(new Set(updates.map((update) => update.id)));
+        // Extract unique IDs from the updates array
+        const uniqueIds = Array.from(new Set(updates.map((update) => update.id)));
 
-      const body = uniqueIds.map((id) => ({
-        method: "PATCH",
-        uri: `/_apis/wit/workitems/${id}?api-version=${batchApiVersion}`,
-        headers: {
-          "Content-Type": "application/json-patch+json",
-        },
-        body: updates
-          .filter((update) => update.id === id)
-          .map(({ linkToId, type, comment }) => ({
-            op: "add",
-            path: "/relations/-",
-            value: {
-              rel: `${getLinkTypeFromName(type)}`,
-              url: `${orgUrl}/${project}/_apis/wit/workItems/${linkToId}`,
-              attributes: {
-                comment: comment || "",
+        const body = uniqueIds.map((id) => ({
+          method: "PATCH",
+          uri: `/_apis/wit/workitems/${id}?api-version=${batchApiVersion}`,
+          headers: {
+            "Content-Type": "application/json-patch+json",
+          },
+          body: updates
+            .filter((update) => update.id === id)
+            .map(({ linkToId, type, comment }) => ({
+              op: "add",
+              path: "/relations/-",
+              value: {
+                rel: `${getLinkTypeFromName(type)}`,
+                url: `${orgUrl}/${project}/_apis/wit/workItems/${linkToId}`,
+                attributes: {
+                  comment: comment || "",
+                },
               },
-            },
-          })),
-      }));
+            })),
+        }));
 
-      const response = await fetch(`${orgUrl}/_apis/wit/$batch?api-version=${batchApiVersion}`, {
-        method: "PATCH",
-        headers: {
-          "Authorization": `Bearer ${accessToken.token}`,
-          "Content-Type": "application/json",
-          "User-Agent": userAgentProvider(),
-        },
-        body: JSON.stringify(body),
-      });
+        const response = await fetch(`${orgUrl}/_apis/wit/$batch?api-version=${batchApiVersion}`, {
+          method: "PATCH",
+          headers: {
+            "Authorization": `Bearer ${accessToken.token}`,
+            "Content-Type": "application/json",
+            "User-Agent": userAgentProvider(),
+          },
+          body: JSON.stringify(body),
+        });
 
-      if (!response.ok) {
-        throw new Error(`Failed to update work items in batch: ${response.statusText}`);
+        if (!response.ok) {
+          throw new Error(`Failed to update work items in batch: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error linking work items: ${errorMessage}` }],
+          isError: true,
+        };
       }
-
-      const result = await response.json();
-
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
     }
   );
 
@@ -1023,6 +1137,88 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
 
         return {
           content: [{ type: "text", text: `Error adding artifact link to work item: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    WORKITEM_TOOLS.list_work_item_revisions,
+    "List revisions for a work item by ID.",
+    {
+      project: z.string().describe("The name or ID of the Azure DevOps project."),
+      workItemId: z.number().describe("The ID of the work item to retrieve revisions for."),
+      top: z.number().default(50).describe("The maximum number of revisions to return. Defaults to 50."),
+      skip: z.number().optional().describe("Number of revisions to skip for pagination."),
+      expand: z
+        .enum(["None", "Relations", "Fields", "Links", "All"])
+        .default("None")
+        .describe("Expand options for work item revisions. Defaults to 'None'."),
+    },
+    async ({ project, workItemId, top, skip, expand }) => {
+      try {
+        const connection = await connectionProvider();
+        const workItemApi = await connection.getWorkItemTrackingApi();
+        const result = await workItemApi.getRevisions(workItemId, top, skip, WorkItemExpand[expand as keyof typeof WorkItemExpand], project);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error listing work item revisions: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    WORKITEM_TOOLS.update_work_item_comment,
+    "Update an existing comment on a work item by comment ID.",
+    {
+      project: z.string().describe("The name or ID of the Azure DevOps project."),
+      workItemId: z.number().describe("The ID of the work item containing the comment."),
+      commentId: z.number().describe("The ID of the comment to update."),
+      text: z.string().describe("The new text for the comment."),
+      format: z.enum(["markdown", "html"]).optional().default("html"),
+    },
+    async ({ project, workItemId, commentId, text, format }) => {
+      try {
+        const connection = await connectionProvider();
+
+        const orgUrl = connection.serverUrl;
+        const accessToken = await tokenProvider();
+
+        const body = {
+          text,
+        };
+
+        const response = await fetch(`${orgUrl}/${project}/_apis/wit/workItems/${workItemId}/comments/${commentId}?api-version=7.0`, {
+          method: "PATCH",
+          headers: {
+            "Authorization": `Bearer ${accessToken.token}`,
+            "Content-Type": "application/json",
+            "User-Agent": userAgentProvider(),
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update work item comment: ${response.statusText}`);
+        }
+
+        const result = await response.text();
+
+        return {
+          content: [{ type: "text", text: result }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error updating work item comment: ${errorMessage}` }],
           isError: true,
         };
       }

@@ -8,7 +8,7 @@ import { IGitApi } from "azure-devops-node-api/GitApi.js";
 import { z } from "zod";
 import { apiVersion } from "../utils.js";
 import { orgName } from "../index.js";
-import { VersionControlRecursionType } from "azure-devops-node-api/interfaces/GitInterfaces.js";
+import { VersionControlRecursionType, GitVersionOptions, GitVersionType } from "azure-devops-node-api/interfaces/GitInterfaces.js";
 import { GitItem } from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
 const SEARCH_TOOLS = {
@@ -32,50 +32,59 @@ function configureSearchTools(server: McpServer, tokenProvider: () => Promise<Ac
       top: z.number().default(5).describe("Maximum number of results to return"),
     },
     async ({ searchText, project, repository, path, branch, includeFacets, skip, top }) => {
-      const accessToken = await tokenProvider();
-      const connection = await connectionProvider();
-      const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/codesearchresults?api-version=${apiVersion}`;
+      try {
+        const accessToken = await tokenProvider();
+        const connection = await connectionProvider();
+        const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/codesearchresults?api-version=${apiVersion}`;
 
-      const requestBody: Record<string, unknown> = {
-        searchText,
-        includeFacets,
-        $skip: skip,
-        $top: top,
-      };
+        const requestBody: Record<string, unknown> = {
+          searchText,
+          includeFacets,
+          $skip: skip,
+          $top: top,
+        };
 
-      const filters: Record<string, string[]> = {};
-      if (project && project.length > 0) filters.Project = project;
-      if (repository && repository.length > 0) filters.Repository = repository;
-      if (path && path.length > 0) filters.Path = path;
-      if (branch && branch.length > 0) filters.Branch = branch;
+        const filters: Record<string, string[]> = {};
+        if (project && project.length > 0) filters.Project = project;
+        if (repository && repository.length > 0) filters.Repository = repository;
+        if (path && path.length > 0) filters.Path = path;
+        if (branch && branch.length > 0) filters.Branch = branch;
 
-      if (Object.keys(filters).length > 0) {
-        requestBody.filters = filters;
+        if (Object.keys(filters).length > 0) {
+          requestBody.filters = filters;
+        }
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken.token}`,
+            "User-Agent": userAgentProvider(),
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Azure DevOps Code Search API error: ${response.status} ${response.statusText}`);
+        }
+
+        const resultText = await response.text();
+        const parsedResults = JSON.parse(resultText) as { results?: SearchResult[] };
+
+        const gitApi = await connection.getGitApi();
+        const combinedResults = await fetchCombinedResults(parsedResults.results ?? [], gitApi);
+
+        const output = { results: parsedResults, fileContents: combinedResults };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error searching code: ${errorMessage}` }],
+          isError: true,
+        };
       }
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken.token}`,
-          "User-Agent": userAgentProvider(),
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Azure DevOps Code Search API error: ${response.status} ${response.statusText}`);
-      }
-
-      const resultText = await response.text();
-      const resultJson = JSON.parse(resultText) as { results?: SearchResult[] };
-
-      const gitApi = await connection.getGitApi();
-      const combinedResults = await fetchCombinedResults(resultJson.results ?? [], gitApi);
-
-      return {
-        content: [{ type: "text", text: resultText + JSON.stringify(combinedResults) }],
-      };
     }
   );
 
@@ -91,42 +100,50 @@ function configureSearchTools(server: McpServer, tokenProvider: () => Promise<Ac
       top: z.number().default(10).describe("Maximum number of results to return"),
     },
     async ({ searchText, project, wiki, includeFacets, skip, top }) => {
-      const accessToken = await tokenProvider();
-      const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/wikisearchresults?api-version=${apiVersion}`;
+      try {
+        const accessToken = await tokenProvider();
+        const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/wikisearchresults?api-version=${apiVersion}`;
 
-      const requestBody: Record<string, unknown> = {
-        searchText,
-        includeFacets,
-        $skip: skip,
-        $top: top,
-      };
+        const requestBody: Record<string, unknown> = {
+          searchText,
+          includeFacets,
+          $skip: skip,
+          $top: top,
+        };
 
-      const filters: Record<string, string[]> = {};
-      if (project && project.length > 0) filters.Project = project;
-      if (wiki && wiki.length > 0) filters.Wiki = wiki;
+        const filters: Record<string, string[]> = {};
+        if (project && project.length > 0) filters.Project = project;
+        if (wiki && wiki.length > 0) filters.Wiki = wiki;
 
-      if (Object.keys(filters).length > 0) {
-        requestBody.filters = filters;
+        if (Object.keys(filters).length > 0) {
+          requestBody.filters = filters;
+        }
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken.token}`,
+            "User-Agent": userAgentProvider(),
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Azure DevOps Wiki Search API error: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.text();
+        return {
+          content: [{ type: "text", text: result }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error searching wiki: ${errorMessage}` }],
+          isError: true,
+        };
       }
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken.token}`,
-          "User-Agent": userAgentProvider(),
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Azure DevOps Wiki Search API error: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.text();
-      return {
-        content: [{ type: "text", text: result }],
-      };
     }
   );
 
@@ -145,45 +162,53 @@ function configureSearchTools(server: McpServer, tokenProvider: () => Promise<Ac
       top: z.number().default(10).describe("Number of results to return"),
     },
     async ({ searchText, project, areaPath, workItemType, state, assignedTo, includeFacets, skip, top }) => {
-      const accessToken = await tokenProvider();
-      const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/workitemsearchresults?api-version=${apiVersion}`;
+      try {
+        const accessToken = await tokenProvider();
+        const url = `https://almsearch.dev.azure.com/${orgName}/_apis/search/workitemsearchresults?api-version=${apiVersion}`;
 
-      const requestBody: Record<string, unknown> = {
-        searchText,
-        includeFacets,
-        $skip: skip,
-        $top: top,
-      };
+        const requestBody: Record<string, unknown> = {
+          searchText,
+          includeFacets,
+          $skip: skip,
+          $top: top,
+        };
 
-      const filters: Record<string, unknown> = {};
-      if (project && project.length > 0) filters["System.TeamProject"] = project;
-      if (areaPath && areaPath.length > 0) filters["System.AreaPath"] = areaPath;
-      if (workItemType && workItemType.length > 0) filters["System.WorkItemType"] = workItemType;
-      if (state && state.length > 0) filters["System.State"] = state;
-      if (assignedTo && assignedTo.length > 0) filters["System.AssignedTo"] = assignedTo;
+        const filters: Record<string, unknown> = {};
+        if (project && project.length > 0) filters["System.TeamProject"] = project;
+        if (areaPath && areaPath.length > 0) filters["System.AreaPath"] = areaPath;
+        if (workItemType && workItemType.length > 0) filters["System.WorkItemType"] = workItemType;
+        if (state && state.length > 0) filters["System.State"] = state;
+        if (assignedTo && assignedTo.length > 0) filters["System.AssignedTo"] = assignedTo;
 
-      if (Object.keys(filters).length > 0) {
-        requestBody.filters = filters;
+        if (Object.keys(filters).length > 0) {
+          requestBody.filters = filters;
+        }
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken.token}`,
+            "User-Agent": userAgentProvider(),
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Azure DevOps Work Item Search API error: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.text();
+        return {
+          content: [{ type: "text", text: result }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [{ type: "text", text: `Error searching work items: ${errorMessage}` }],
+          isError: true,
+        };
       }
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken.token}`,
-          "User-Agent": userAgentProvider(),
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Azure DevOps Work Item Search API error: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.text();
-      return {
-        content: [{ type: "text", text: result }],
-      };
     }
   );
 }
@@ -213,7 +238,7 @@ async function fetchCombinedResults(topSearchResults: SearchResult[], gitApi: IG
         continue;
       }
 
-      const versionDescriptor = changeId ? { version: changeId, versionType: 2, versionOptions: 0 } : undefined;
+      const versionDescriptor = changeId ? { version: changeId, versionType: GitVersionType.Commit, versionOptions: GitVersionOptions.None } : undefined;
 
       const item = await gitApi.getItem(
         repositoryId,

@@ -13,6 +13,7 @@ const WIKI_TOOLS = {
   list_wiki_pages: "wiki_list_pages",
   get_wiki_page_content: "wiki_get_page_content",
   create_or_update_page: "wiki_create_or_update_page",
+  get_page: "wiki_get_page",
 };
 
 function configureWikiTools(server: McpServer, tokenProvider: () => Promise<AccessToken>, connectionProvider: () => Promise<WebApi>) {
@@ -264,6 +265,62 @@ function configureWikiTools(server: McpServer, tokenProvider: () => Promise<Acce
 
         return {
           content: [{ type: "text", text: `Error creating/updating wiki page: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    WIKI_TOOLS.get_page,
+    "Get wiki page metadata (not content).",
+    {
+      wikiIdentifier: z.string().describe("The unique identifier or name of the wiki."),
+      project: z.string().describe("The project name or ID where the wiki is located."),
+      path: z.string().describe("The path of the wiki page (e.g., '/Home' or '/Documentation/Setup')."),
+      recursionLevel: z
+        .enum(["None", "OneLevel", "OneLevelPlusNestedEmptyFolders", "Full"])
+        .optional()
+        .describe("The recursion level for retrieving child pages. Optional."),
+    },
+    async ({ wikiIdentifier, project, path, recursionLevel }) => {
+      try {
+        const connection = await connectionProvider();
+        const accessToken = await tokenProvider();
+
+        // Normalize the path
+        const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+        const encodedPath = encodeURIComponent(normalizedPath);
+
+        const orgUrl = connection.serverUrl;
+        let url = `${orgUrl}/${project}/_apis/wiki/wikis/${wikiIdentifier}/pages?path=${encodedPath}&api-version=7.0`;
+
+        if (recursionLevel) {
+          url += `&recursionLevel=${recursionLevel}`;
+        }
+
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken.token}`,
+          },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to get wiki page (${response.status}): ${errorText}`);
+        }
+
+        const result = await response.json();
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+
+        return {
+          content: [{ type: "text", text: `Error fetching wiki page: ${errorMessage}` }],
           isError: true,
         };
       }
