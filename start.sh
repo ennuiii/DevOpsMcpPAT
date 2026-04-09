@@ -1,0 +1,10 @@
+#!/bin/bash
+export ADO_MCP_AUTH_TOKEN="$AZURE_DEVOPS_PAT"
+exec npx -y supergateway \
+  --stdio "npx -y @azure-devops/mcp $AZURE_DEVOPS_ORG --auth-type env" \
+  --port ${PORT:-8000} \
+  --outputTransport streamableHttp \
+  --streamableHttpPath /mcp \
+  --stateful \
+  --cors \
+  --healthEndpoint /health
